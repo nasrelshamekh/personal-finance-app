@@ -3,7 +3,14 @@ import { RateSource, type Prisma } from '@prisma/client';
 import { clearRates, withRollback } from '../../test/db';
 import { SETTINGS_ID } from '../../lib/settings';
 import { AppError } from '../../lib/errors';
-import { convertAmount, listRates, refreshRates, setManualRate } from './service';
+import {
+  convertAmount,
+  ensureFreshRates,
+  listRates,
+  refreshRates,
+  resetAutoRefreshState,
+  setManualRate,
+} from './service';
 
 /**
  * Refresh is the only path that touches the network, so `fetch` is stubbed here and the
@@ -60,6 +67,122 @@ async function enableApi(tx: Prisma.TransactionClient): Promise<void> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetAutoRefreshState();
+});
+
+/** A rate old enough to be past the 30h window, so auto-refresh considers it stale. */
+async function insertStaleRate(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.exchangeRate.create({
+    data: {
+      base: 'USD',
+      quote: 'EGP',
+      rate: '50.0',
+      asOf: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      source: RateSource.MANUAL,
+    },
+  });
+}
+
+describe('ensureFreshRates (D12)', () => {
+  it('fetches automatically when stored rates have gone stale', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await enableApi(tx);
+      await insertStaleRate(tx);
+      stubProvider({ USD: 52.5, EUR: 60.1, GBP: 70.2 });
+
+      expect(await ensureFreshRates(tx)).toBe('REFRESHED');
+
+      // No rate was typed by hand, yet USD/EGP is now current.
+      const usd = await tx.exchangeRate.findFirst({
+        where: { base: 'USD', source: RateSource.API },
+      });
+      expect(usd?.rate.toString()).toBe('52.5');
+    });
+  });
+
+  it('does not fetch when stored rates are already current', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await enableApi(tx);
+      for (const base of ['USD', 'EUR', 'GBP'] as const) {
+        await tx.exchangeRate.create({
+          data: {
+            base,
+            quote: 'EGP',
+            rate: '50.0',
+            asOf: new Date(Date.now() - 60_000),
+            source: RateSource.MANUAL,
+          },
+        });
+      }
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+
+      expect(await ensureFreshRates(tx)).toBe('FRESH');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('stays quiet when automatic rates are switched off', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await tx.setting.upsert({
+        where: { id: SETTINGS_ID },
+        create: { id: SETTINGS_ID, ratesApiEnabled: false },
+        update: { ratesApiEnabled: false },
+      });
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+
+      expect(await ensureFreshRates(tx)).toBe('DISABLED');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('never throws when the provider is unreachable', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await enableApi(tx);
+      await insertStaleRate(tx);
+      stubProvider({});
+
+      // Offline must degrade to stored rates, not fail the request.
+      await expect(ensureFreshRates(tx)).resolves.toBe('FAILED');
+    });
+  });
+
+  it('backs off after a failure instead of retrying every request', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await enableApi(tx);
+      await insertStaleRate(tx);
+      stubProvider({});
+
+      expect(await ensureFreshRates(tx)).toBe('FAILED');
+
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+      expect(await ensureFreshRates(tx)).toBe('THROTTLED');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  it('leaves stored rates usable after a failed refresh', async () => {
+    await withRollback(async (tx) => {
+      await clearRates(tx);
+      await enableApi(tx);
+      await insertStaleRate(tx);
+      stubProvider({});
+
+      await ensureFreshRates(tx);
+
+      const result = await convertAmount(tx, { amount: '100', from: 'USD', to: 'EGP' });
+      expect(result.result).toBe('5000.0000');
+      // Still honest about the rate being old.
+      expect(result.rate.stale).toBe(true);
+    });
+  });
 });
 
 describe('refreshRates', () => {

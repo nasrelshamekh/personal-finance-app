@@ -151,6 +151,51 @@ Rationale, so it isn't optimised away later: backfilling several months of histo
 
 ---
 
+---
+
+## D12. Rates are fetched automatically — added after Phase 2
+
+**Requested:** "I don't want there to be a manual conversion of currencies. It needs to be
+as of the date it occurred — I put the USD in and it converts to EGP and saves at the time
+of that insertion."
+
+Correct, and the manual-first default from §6 was the wrong shape for daily use. Typing a
+rate to record a transaction is friction that shouldn't exist.
+
+**What changed:**
+
+- `ratesApiEnabled` now defaults to **true**, and `rateSource` to **API**. The migration
+  also flips the existing settings row — a changed column default applies only to new
+  rows, and Setting has exactly one.
+- `ensureFreshRates()` tops rates up when they have gone stale. `GET /api/fx/rates` runs
+  it and reports the outcome, so opening any screen keeps rates current with no button
+  press. The button stays for forcing it.
+- Automatic fetches use a **3s** timeout against the manual button's 10s, and back off for
+  **5 minutes** after a failure. Being offline must not cost three seconds a screen, and a
+  disconnected machine must not attempt a doomed fetch on every request.
+- **A write never blocks on the network.** It converts with whatever is stored. Rate
+  resolution still touches no network at all, which is what preserves offline operation.
+
+**The one thing this cannot do**, and the reason D11 existed: the free endpoint has no
+historical rates. "As of the date it occurred" is exact for a transaction entered the day
+it happened — the normal case — but the provider cannot answer what USD/EGP was on 12
+March. Chosen resolution: **use the latest rate and flag the row.** Never block, never
+demand a typed rate.
+
+Every money-bearing row therefore stores `rateAsOf`, and `approximate ⟺ rateAsOf > date`.
+A stored boolean would have been redundant and could drift; the comparison cannot. It also
+carries more information — the UI can name both dates rather than just saying "approximate".
+
+**The manual override stays** as an escape hatch on the Currency page. The original
+reasoning in §6 still holds: Egypt's parallel-market rate drifts from the official one, and
+a bank's actual rate includes a spread. It is simply no longer the daily path.
+
+**Superseded:** D11's "prompt and focus the rate field" is replaced by flagging the row.
+The rationale it was protecting — that backfilled history at today's rate looks smooth and
+is fiction — is preserved by the flag.
+
+---
+
 ## Go
 
 Apply D1–D11 to SPEC.md, then implement **Phase 0 and Phase 1 only**. Run each phase's acceptance checks, commit conventionally at each boundary, and stop and report before Phase 2.

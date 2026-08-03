@@ -51,7 +51,10 @@ function unixToDate(seconds: number): Date {
 export class ApiRateProvider implements RateProvider {
   readonly name = RateSource.API;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly timeoutMs: number = FX_FETCH_TIMEOUT_MS,
+  ) {}
 
   /**
    * Conforms to the RateProvider interface. `fetchLatest` is the richer entry point —
@@ -69,7 +72,7 @@ export class ApiRateProvider implements RateProvider {
     let response: Response;
     try {
       response = await fetch(url, {
-        signal: AbortSignal.timeout(FX_FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(this.timeoutMs),
         headers: { accept: 'application/json' },
       });
     } catch (cause) {

@@ -3,7 +3,14 @@ import { prisma } from '../../prisma';
 import { validate } from '../../middleware/validate';
 import { fxConvertQuerySchema, fxManualRateSchema } from './schema';
 import type { FxConvertQuery, FxManualRateInput } from './schema';
-import { convertAmount, listRates, listStoredRates, refreshRates, setManualRate } from './service';
+import {
+  convertAmount,
+  ensureFreshRates,
+  listRates,
+  listStoredRates,
+  refreshRates,
+  setManualRate,
+} from './service';
 
 /**
  * Thin by design: validate, call the service, return. No Prisma in here (SPEC §3).
@@ -13,9 +20,18 @@ import { convertAmount, listRates, listStoredRates, refreshRates, setManualRate 
  */
 export const fxRouter: Router = Router();
 
-/** Latest resolved rate per pair, with age and staleness. */
-fxRouter.get('/rates', async (_req, res) => {
-  res.json(await listRates(prisma));
+/**
+ * Latest resolved rate per pair, with age and staleness.
+ *
+ * Tops rates up automatically first (D12), so simply opening a screen keeps them current
+ * and no rate ever has to be typed. Pass `?refresh=false` to read without fetching.
+ */
+fxRouter.get('/rates', async (req, res) => {
+  const at = new Date();
+  const outcome =
+    req.query['refresh'] === 'false' ? 'DISABLED' : await ensureFreshRates(prisma, at);
+
+  res.json(await listRates(prisma, at, outcome));
 });
 
 /** The raw stored rows behind those figures, for the rate table. */

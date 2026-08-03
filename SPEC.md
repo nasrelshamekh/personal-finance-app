@@ -191,7 +191,11 @@ representation: a transfer. For EGP accounts `rateToEgp` is always exactly `1`.
 
 **Category** — id, name, kind (INCOME | EXPENSE), color, icon, parentId (self-relation, one level of nesting only), isArchived.
 
-**Transaction** — id, type, amount (Decimal, **signed** — see §4.7), currency, rateToEgp (Decimal), amountEgp (Decimal, signed), date (DateTime), note, accountId, categoryId (nullable for TRANSFER), **transferGroupId (String? @db.Uuid, indexed — only for TRANSFER)**, debtPaymentId (nullable), savingsContributionId (nullable), createdAt, updatedAt. Index on `(date)`, `(accountId, date)` and `(transferGroupId)`.
+**Transaction** — id, type, amount (Decimal, **signed** — see §4.7), currency, rateToEgp (Decimal), amountEgp (Decimal, signed), **rateAsOf (DateTime)**, date (DateTime), note, accountId, categoryId (nullable for TRANSFER), **transferGroupId (String? @db.Uuid, indexed — only for TRANSFER)**, debtPaymentId (nullable), savingsContributionId (nullable), createdAt, updatedAt. Index on `(date)`, `(accountId, date)` and `(transferGroupId)`.
+
+`rateAsOf` is the `asOf` of the rate actually used, frozen alongside `rateToEgp`. When it is later
+than `date`, the rate post-dates the transaction and the EGP figure is an approximation — see D12
+in §6. `DebtPayment` and `SavingsContribution` carry the same field for the same reason.
 
 **Transfers are two linked rows (D2).** A transfer writes two `TRANSFER` rows in one Prisma
 transaction sharing a `transferGroupId`: an outflow on the source account in the source account's
@@ -247,7 +251,7 @@ staleness rule in §4.6; it is null for manual rates, which fall back to the 30h
 Because `MANUAL` is declared before `API` in `enum RateSource`, Postgres sorts `MANUAL` first, so
 D1's tie-break needs no raw SQL — `orderBy: [{ asOf: 'desc' }, { source: 'asc' }]` is sufficient.
 
-**Setting** — single-row table (id fixed to `1`): baseCurrency (default EGP, **locked** — see §11), locale, rateSource, ratesApiEnabled (bool), **ratesApiEolAt (DateTime?)**, themePreset, themeMode, updatedAt.
+**Setting** — single-row table (id fixed to `1`): baseCurrency (default EGP, **locked** — see §11), locale, rateSource (**default API**), ratesApiEnabled (bool, **default true** — D12), **ratesApiEolAt (DateTime?)**, themePreset, themeMode, updatedAt.
 
 `ratesApiEolAt` persists the provider's `time_eol_unix` (D10); non-null means the endpoint has an
 announced death date and Settings must warn about it.
@@ -274,8 +278,24 @@ interface RateProvider {
 ```
 
 Two implementations:
-- **`ManualRateProvider`** — reads whatever I typed into Settings. **This is the default.** The app must be fully functional with zero internet access.
-- **`ApiRateProvider`** — `GET https://open.er-api.com/v6/latest/{BASE}` (free, no API key, includes EGP). Only used when `ratesApiEnabled` is true in settings.
+- **`ApiRateProvider`** — `GET https://open.er-api.com/v6/latest/{BASE}` (free, no API key, includes EGP). **This is the default** (D12): `ratesApiEnabled` defaults to true, and rates top themselves up automatically. I should never have to type a rate to record a foreign transaction.
+- **`ManualRateProvider`** — reads whatever I typed on the Currency page. The escape hatch, not the daily path. It is what makes the app fully functional with zero internet access, and what lets me record the rate I *actually* got when it differs from the published one.
+
+**Automatic refresh (D12).** `ensureFreshRates()` tops rates up when they have gone stale,
+so opening any screen keeps them current. Three properties matter more than freshness:
+
+1. **It never throws.** A provider outage degrades to stored rates, exactly as being
+   offline does. Rate *resolution* still touches no network, ever.
+2. **It gives up quickly** — a 3s provider timeout, against 10s for the manual button.
+   Automatic fetching happens while I'm trying to do something else; being offline must
+   not cost me three seconds a screen.
+3. **It backs off** for five minutes after a failure, so a machine with no connection
+   doesn't attempt a doomed fetch on every request.
+
+`GET /api/fx/rates` runs it before reading and reports what happened in `autoRefresh`
+(`FRESH` / `REFRESHED` / `PENDING` / `THROTTLED` / `DISABLED` / `FAILED`). Pass
+`?refresh=false` to read without fetching. **A write never blocks on the network** — it
+converts with whatever is stored.
 
 Behaviour:
 
@@ -304,18 +324,28 @@ Read `time_eol_unix` on every refresh and persist it to `Setting.ratesApiEolAt`.
 back non-zero, surface a persistent warning in Settings with the deprecation date, so I can switch
 providers before the endpoint dies rather than after.
 
-**Backdated entries must prompt, not guess (D11).** The free endpoint returns today's rates only,
-so a transaction dated in the past with no stored rate at-or-before it will resolve via fallback
-rule 2 above — correct for a *live* conversion, silently wrong for a *historical* one. In the
-transaction, debt-payment and savings-contribution forms: if the selected date is **more than 48h
-in the past** and no rate exists at-or-before it, show an inline notice naming the date the
-suggested rate is actually from, and focus the rate field so I can overwrite it. The import path
-gets the same treatment — backdated rows resolved by fallback are flagged in the dry-run diff
-rather than imported silently.
+**Backdated entries save immediately and are flagged, not blocked (D11, revised by D12).**
+The free endpoint returns today's rates only, so a transaction dated in the past with no stored
+rate at-or-before it resolves via fallback rule 2 above — correct for a *live* conversion,
+approximate for a *historical* one. That must never stop the write and must never demand a typed
+rate.
+
+Every money-bearing row therefore stores **`rateAsOf`**: the `asOf` of the rate actually used.
+The rule is a comparison, not a stored boolean:
+
+```
+approximate  ⟺  rateAsOf > date        (the rate post-dates the transaction)
+```
+
+Rows where that holds are marked in the UI — the same amber treatment as a stale figure, with a
+tooltip naming both dates ("rate from 3 Aug, transaction dated 12 Mar"). The manual override on
+the Currency page remains available to correct one, but nothing is ever *required* of me. The
+import path gets the same treatment: backdated rows resolved by fallback are flagged in the
+dry-run diff rather than imported silently.
 
 Rationale, so it isn't optimised away later: backfilling several months of history at today's rate
-produces a net-worth chart that looks smooth and is entirely fiction. The manual override is the
-fix, but only if the app tells me I need it.
+produces a net-worth chart that looks smooth and is entirely fiction. Flagging the rows is what
+keeps that visible.
 
 ---
 

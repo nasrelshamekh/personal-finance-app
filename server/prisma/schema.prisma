@@ -123,6 +123,9 @@ model Transaction {
   rateToEgp Decimal @db.Decimal(18, 8)
   /// Frozen at write time, same sign as `amount`, never recomputed on read (SPEC §4.4).
   amountEgp Decimal @db.Decimal(18, 4)
+  /// The `asOf` of the rate actually used. When this is later than `date`, the rate
+  /// post-dates the transaction and the EGP figure is an approximation (D12).
+  rateAsOf DateTime
 
   date DateTime
   note String?
@@ -193,6 +196,8 @@ model DebtPayment {
 
   rateToEgp Decimal @db.Decimal(18, 8)
   amountEgp Decimal @db.Decimal(18, 4)
+  /// See Transaction.rateAsOf (D12).
+  rateAsOf DateTime
 
   date DateTime
   note String?
@@ -238,6 +243,8 @@ model SavingsContribution {
 
   rateToEgp Decimal @db.Decimal(18, 8)
   amountEgp Decimal @db.Decimal(18, 4)
+  /// See Transaction.rateAsOf (D12).
+  rateAsOf DateTime
 
   date DateTime
 
@@ -295,8 +302,11 @@ model Setting {
   baseCurrency Currency @default(EGP)
   locale       String   @default("en-US")
 
-  rateSource      RateSource @default(MANUAL)
-  ratesApiEnabled Boolean    @default(false)
+  rateSource RateSource @default(API)
+  /// On by default (D12): rates are fetched automatically so a foreign transaction
+  /// converts itself. Turning it off falls back to stored and manually entered rates,
+  /// and the app stays fully functional with no network at all.
+  ratesApiEnabled Boolean @default(true)
   /// The provider's time_eol_unix, persisted on every refresh. Non-null means the
   /// endpoint has an announced death date and Settings must warn about it (D10).
   ratesApiEolAt DateTime?

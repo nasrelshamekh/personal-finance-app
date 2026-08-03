@@ -64,9 +64,30 @@ export interface StoredRateDto {
   source: RateSourceDto;
 }
 
+/**
+ * What the automatic refresh did on this request (D12). Rates are fetched without being
+ * asked for, so the UI can say which of these happened rather than leaving you to guess
+ * whether a figure is current.
+ */
+export type AutoRefreshOutcome =
+  /** Stored rates were already current; nothing was fetched. */
+  | 'FRESH'
+  /** Fetched and stored new rates just now. */
+  | 'REFRESHED'
+  /** Another request is already fetching; this one used stored rates. */
+  | 'PENDING'
+  /** A recent attempt failed, so we are not hammering a provider that is down. */
+  | 'THROTTLED'
+  /** Automatic fetching is switched off in Settings. */
+  | 'DISABLED'
+  /** Tried and could not reach the provider. Stored rates were used instead. */
+  | 'FAILED';
+
 export interface FxRatesResponse {
   /** One resolved rate per foreign currency against EGP, newest first per pair. */
   rates: ResolvedRateDto[];
+  /** What the automatic refresh did before these rates were read (D12). */
+  autoRefresh: AutoRefreshOutcome;
   /** Whether the API provider may be used at all (Settings.ratesApiEnabled). */
   apiEnabled: boolean;
   /** Non-null when the provider has announced a shutdown date (D10). */

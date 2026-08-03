@@ -151,7 +151,17 @@ All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
 
 Resolution (`server/src/lib/fx/resolve.ts`) **never touches the network** — it reads only
 what is already stored. That is what makes the app work offline and why a provider outage
-can't break a write. The only outbound call in the codebase is `POST /api/fx/refresh`.
+can't break a write.
+
+Rates are fetched **automatically** (D12): `ensureFreshRates()` in the fx service tops them
+up when stale, and `GET /api/fx/rates` runs it. Nobody should ever have to type a rate.
+Automatic fetches use a 3s timeout and back off 5 minutes after a failure; the manual
+`POST /api/fx/refresh` button is the patient one at 10s. **Never make a write wait on a
+fetch** — writes convert with whatever is stored.
+
+Every money-bearing row stores `rateAsOf` alongside `rateToEgp`. A row is approximate when
+`rateAsOf > date`, i.e. the rate post-dates the transaction — derive it, don't store a
+second boolean that can drift.
 
 Order: identity → stored direct → stored reverse (inverted) → triangulated through EGP →
 hardcoded emergency default. Anything that isn't an exact stored match says so in

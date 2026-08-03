@@ -21,11 +21,14 @@ afterAll(async () => {
 
 describe('GET /api/fx/rates', () => {
   it('returns a resolved rate per foreign currency', async () => {
-    const res = await request(app).get('/api/fx/rates');
+    // `refresh=false` keeps this test off the network: with automatic rates on, the
+    // default path would fetch for real once the seeded rates age past 30h.
+    const res = await request(app).get('/api/fx/rates').query({ refresh: 'false' });
 
     expect(res.status).toBe(200);
     expect(res.body.rates).toHaveLength(3);
     expect(typeof res.body.apiEnabled).toBe('boolean');
+    expect(res.body.autoRefresh).toBe('DISABLED');
 
     for (const rate of res.body.rates) {
       expect(rate.quote).toBe('EGP');
@@ -148,16 +151,23 @@ describe('PUT /api/fx/manual', () => {
 });
 
 describe('POST /api/fx/refresh', () => {
-  it('refuses while the API is switched off, and says where to turn it on', async () => {
-    const settings = await prisma.setting.findUnique({ where: { id: 1 } });
-    if (settings?.ratesApiEnabled) {
-      // The seeded default is off; if a developer turned it on, this check is moot.
-      return;
+  it('refuses while automatic rates are switched off, and says where to turn them on', async () => {
+    const before = await prisma.setting.findUniqueOrThrow({ where: { id: 1 } });
+
+    try {
+      await prisma.setting.update({ where: { id: 1 }, data: { ratesApiEnabled: false } });
+
+      const res = await request(app).post('/api/fx/refresh');
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.message).toContain('Settings');
+      expect(res.body.error.details).toEqual({ setting: 'ratesApiEnabled' });
+    } finally {
+      // Restore whatever the setting actually was, rather than assuming a default.
+      await prisma.setting.update({
+        where: { id: 1 },
+        data: { ratesApiEnabled: before.ratesApiEnabled },
+      });
     }
-
-    const res = await request(app).post('/api/fx/refresh');
-
-    expect(res.status).toBe(422);
-    expect(res.body.error.message).toContain('Settings');
   });
 });

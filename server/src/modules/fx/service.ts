@@ -4,6 +4,7 @@ import {
   FOREIGN_CURRENCIES,
   RATE_ATTRIBUTION,
   evaluateExpression,
+  type AutoRefreshOutcome,
   type Currency,
   type FxConvertResponse,
   type FxManualRateInput,
@@ -21,6 +22,10 @@ import { getSettings, SETTINGS_ID } from '../../lib/settings';
 import { convert, div, mul, sub, toRateString, toStorageString } from '../../lib/money';
 import {
   ApiRateProvider,
+  FX_AUTO_FETCH_TIMEOUT_MS,
+  FX_FETCH_TIMEOUT_MS,
+  FX_RETRY_AFTER_FAILURE_MS,
+  FX_STAMPEDE_WINDOW_MS,
   FxProviderError,
   getRate,
   getRatesToBase,
@@ -48,7 +53,11 @@ function toDto(resolved: ResolvedRate): ResolvedRateDto {
   };
 }
 
-export async function listRates(db: Db, at: Date = new Date()): Promise<FxRatesResponse> {
+export async function listRates(
+  db: Db,
+  at: Date = new Date(),
+  autoRefresh: AutoRefreshOutcome = 'DISABLED',
+): Promise<FxRatesResponse> {
   const [settings, rates] = await Promise.all([
     getSettings(db),
     getRatesToBase(db, FOREIGN_CURRENCIES, at),
@@ -56,6 +65,7 @@ export async function listRates(db: Db, at: Date = new Date()): Promise<FxRatesR
 
   return {
     rates: rates.map(toDto),
+    autoRefresh,
     apiEnabled: settings.ratesApiEnabled,
     apiEolAt: settings.ratesApiEolAt?.toISOString() ?? null,
     // Attribution is a licence condition of the free endpoint, shown whenever the API is
@@ -173,17 +183,23 @@ function deltaPct(previous: string | null, next: string): string | null {
  * `USD→EGP` row shadow a fresh API `EGP→USD` one, because resolution prefers a direct
  * match over an inverted one. One direction, no shadowing.
  */
-export async function refreshRates(db: Db): Promise<FxRefreshResponse> {
+export async function refreshRates(
+  db: Db,
+  options: { timeoutMs?: number } = {},
+): Promise<FxRefreshResponse> {
   const settings = await getSettings(db);
 
   if (!settings.ratesApiEnabled) {
     throw AppError.unprocessable(
-      'The rates API is switched off. Turn it on in Settings, or set the rate by hand on this page.',
+      'Automatic rates are switched off. Turn them on in Settings, or set the rate by hand on this page.',
       { setting: 'ratesApiEnabled' },
     );
   }
 
-  const provider = new ApiRateProvider(env.FX_API_BASE_URL);
+  const provider = new ApiRateProvider(
+    env.FX_API_BASE_URL,
+    options.timeoutMs ?? FX_FETCH_TIMEOUT_MS,
+  );
   const at = new Date();
 
   // Rates before the refresh, so the button can report what actually moved.
@@ -287,4 +303,60 @@ export async function refreshRates(db: Db): Promise<FxRefreshResponse> {
     failures,
     apiEolAt: eolAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Automatic rate fetching (D12).
+ *
+ * You should never have to type a rate to record a foreign transaction. This tops rates
+ * up on its own when they have gone stale, so that by the time a figure is converted the
+ * stored rate is today's.
+ *
+ * Three properties matter more than freshness does:
+ *
+ * 1. **It never throws.** A provider outage degrades to stored rates, exactly as when
+ *    the network is off entirely. Resolution itself still touches no network.
+ * 2. **It gives up quickly** — a 3s provider timeout rather than 10s, because this runs
+ *    while you are trying to do something else.
+ * 3. **It backs off.** After a failure it stays quiet for five minutes, so a machine with
+ *    no connection doesn't attempt a doomed fetch on every single request.
+ *
+ * The two timestamps below are module state, which is sound here: this is a single-user,
+ * single-process, self-hosted app. If it ever runs more than one process, they become a
+ * per-process hint rather than a global lock — which costs an occasional duplicate fetch
+ * and nothing else, because the upsert is idempotent.
+ */
+let lastFailureAt = 0;
+let refreshStartedAt = 0;
+
+/** Test seam: the module state above would otherwise leak between test cases. */
+export function resetAutoRefreshState(): void {
+  lastFailureAt = 0;
+  refreshStartedAt = 0;
+}
+
+export async function ensureFreshRates(db: Db, at: Date = new Date()): Promise<AutoRefreshOutcome> {
+  const settings = await getSettings(db);
+  if (!settings.ratesApiEnabled) return 'DISABLED';
+
+  const rates = await getRatesToBase(db, FOREIGN_CURRENCIES, at);
+  if (rates.every((rate) => !rate.stale)) return 'FRESH';
+
+  const now = Date.now();
+  if (now - refreshStartedAt < FX_STAMPEDE_WINDOW_MS) return 'PENDING';
+  if (now - lastFailureAt < FX_RETRY_AFTER_FAILURE_MS) return 'THROTTLED';
+
+  refreshStartedAt = now;
+  try {
+    await refreshRates(db, { timeoutMs: FX_AUTO_FETCH_TIMEOUT_MS });
+    return 'REFRESHED';
+  } catch (error) {
+    // Deliberately swallowed: an automatic refresh is best-effort, and the caller has
+    // perfectly usable stored rates. The outcome is reported, not thrown.
+    lastFailureAt = Date.now();
+    logger.warn({ err: error }, 'Automatic rate refresh failed; using stored rates');
+    return 'FAILED';
+  } finally {
+    refreshStartedAt = 0;
+  }
 }
