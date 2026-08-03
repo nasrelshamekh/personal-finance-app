@@ -69,5 +69,13 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
 
+  {
+    // Build-time scripts run under node and report to a terminal, so they are allowed
+    // the console the application code is not.
+    files: ['**/scripts/**/*.{mjs,js,ts}'],
+    languageOptions: { globals: globals.node },
+    rules: { 'no-console': 'off' },
+  },
+
   prettier,
 );

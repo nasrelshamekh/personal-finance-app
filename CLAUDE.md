@@ -142,7 +142,16 @@ history or take history with it, and both rewrite past figures.
 
 Every folder under `client/src/features/<name>/` owns its components, its `api.ts` (typed
 fetch calls) and its `queries.ts` (TanStack Query hooks + a query-key factory).
-**Components never call `fetch` directly.**
+**Components never call `fetch` directly** — they go through `lib/api.ts`, which only ever
+uses same-origin relative URLs so the app works unchanged from a phone on the LAN.
+
+Routes all render inside `AppShell`, so the sidebar, topbar and FX strip persist across
+navigation instead of remounting. `components/layout/navigation.ts` is the single source of
+truth for what the nav shows; `router.tsx` holds the matching destinations.
+
+A file that exports a component must export *only* components, or Fast Refresh stops
+working for it — that is why `theme-context.ts` and `hooks/useTheme.ts` sit beside
+`ThemeProvider.tsx` rather than inside it.
 
 ## Styling
 
@@ -163,8 +172,23 @@ All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
   align and digits don't jitter on update.
 - Fonts are self-hosted via `@fontsource-variable`. **No CDN font links** — they'd break
   the offline requirement.
+- Preset blocks are keyed on `[data-theme=…]`, **not** `:root[data-theme=…]`, so the
+  selector also matches a nested element. That is what lets the Settings swatches render
+  each preset's real palette — put `data-theme` (plus `dark`) on a div and everything
+  inside picks it up — instead of keeping a second copy of the colours in JS. Every preset
+  must define its `.dark` variant: `[data-theme=…]` ties with `.dark` on specificity and
+  comes later in the file, so a light primary would otherwise win in dark mode.
+- `npm run check:contrast --workspace client` reads the real oklch values out of
+  `index.css` and reports WCAG ratios for all twelve preset × mode combinations. Run it
+  after touching a preset; it exits non-zero below 4.5:1.
+- **Reduced motion collapses durations to 0.01ms; it does not disable animations.** Radix
+  keeps a closing dialog mounted until `animationend`, so `animation: none` would strand
+  every sheet and dropdown on screen. Same trap if you ever suspend animations globally.
 - `client/src/components/ui/` is shadcn-generated. Extend by wrapping, don't hand-edit. If
   you genuinely must, note it here.
+  - `dropdown-menu.tsx`: the generated `checked={checked}` passes an explicit `undefined`,
+    which `exactOptionalPropertyTypes` rejects. Changed to a conditional spread. Re-apply
+    after any `shadcn add --overwrite` of that component.
 
 ## FX
 

@@ -6,21 +6,39 @@
     <meta name="color-scheme" content="light dark" />
     <title>Ledger EG</title>
     <script>
-      // Applies theme before React mounts so there is never a flash of the wrong theme
-      // (SPEC §11). Deliberately blocking, deliberately inline, deliberately tiny.
+      // Applies both theme axes before React mounts, so there is never a flash of the
+      // wrong theme (SPEC §11). Deliberately blocking, deliberately inline, deliberately
+      // tiny — moving this into React is what causes the flash, so don't.
+      //
+      // The preset list is duplicated here on purpose: this has to run before any module
+      // loads, so it cannot import from shared/. ThemeProvider.tsx holds the real list.
       (function () {
+        var PRESETS = ['graphite', 'harbour', 'papyrus', 'meridian', 'cinnabar', 'basalt'];
+        var root = document.documentElement;
+        var mode = 'system';
+        var preset = 'graphite';
+
         try {
-          var mode = localStorage.getItem('ledger.theme.mode') || 'system';
-          var preset = localStorage.getItem('ledger.theme.preset') || 'graphite';
-          var dark =
-            mode === 'dark' ||
-            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          var root = document.documentElement;
-          root.classList.toggle('dark', dark);
-          root.dataset.theme = preset;
+          var storedMode = localStorage.getItem('ledger.theme.mode');
+          var storedPreset = localStorage.getItem('ledger.theme.preset');
+          if (storedMode === 'light' || storedMode === 'dark' || storedMode === 'system') {
+            mode = storedMode;
+          }
+          if (PRESETS.indexOf(storedPreset) !== -1) {
+            preset = storedPreset;
+          }
         } catch (e) {
-          // localStorage can throw in private modes. A wrong theme beats a blank page.
+          // localStorage throws in some private modes. Defaults beat a blank page.
         }
+
+        var dark =
+          mode === 'dark' ||
+          (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+        root.classList.toggle('dark', dark);
+        root.dataset.theme = preset;
+        // Keeps form controls and scrollbars in step with the theme.
+        root.style.colorScheme = dark ? 'dark' : 'light';
       })();
     </script>
   </head>

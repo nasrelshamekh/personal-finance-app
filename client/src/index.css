@@ -84,6 +84,184 @@
   --money-stale: oklch(0.8 0.15 75);
 }
 
+/*
+  ── Presets ──────────────────────────────────────────────────────────────────
+  Six of them, each with a distinct temperature rather than six hues of the same
+  blue. A preset overrides ONLY --primary, --primary-foreground, --accent, --ring
+  and --chart-1..5 (SPEC §11). Base neutrals stay shared, and money colours are
+  never touched — a theme must not be able to repaint income and expenses.
+
+  Scoped to `[data-theme=…]` rather than `:root[data-theme=…]` so the selector also
+  matches a nested element. That is what lets the Settings swatches render each
+  preset's *real* colours — put data-theme (and .dark) on a div and everything
+  inside it picks up that preset — instead of keeping a second copy of the palette
+  in JavaScript that could drift from this file.
+
+  Every preset MUST define its dark variant. `[data-theme=…]` and `.dark` have equal
+  specificity (0,1,0) and the presets come later in the file, so a preset's light
+  values would otherwise win in dark mode. `[data-theme=…].dark` is (0,2,0) and
+  settles it.
+
+  Contrast of --primary-foreground on --primary is verified for all twelve
+  combinations by `npm run check:contrast`.
+*/
+
+/* Graphite — high-contrast monochrome. The default: nothing competes with the numbers. */
+[data-theme='graphite'] {
+  --primary: oklch(0.24 0.006 285);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.95 0.003 285);
+  --accent-foreground: oklch(0.24 0.006 285);
+  --ring: oklch(0.55 0.012 285);
+  --chart-1: oklch(0.42 0.01 285);
+  --chart-2: oklch(0.54 0.012 285);
+  --chart-3: oklch(0.65 0.012 285);
+  --chart-4: oklch(0.75 0.01 285);
+  --chart-5: oklch(0.84 0.008 285);
+}
+[data-theme='graphite'].dark {
+  --primary: oklch(0.93 0.004 285);
+  --primary-foreground: oklch(0.19 0.006 285);
+  --accent: oklch(0.28 0.007 285);
+  --accent-foreground: oklch(0.96 0.002 286);
+  --ring: oklch(0.62 0.012 285);
+  --chart-1: oklch(0.88 0.006 285);
+  --chart-2: oklch(0.76 0.01 285);
+  --chart-3: oklch(0.64 0.012 285);
+  --chart-4: oklch(0.52 0.012 285);
+  --chart-5: oklch(0.42 0.01 285);
+}
+
+/* Harbour — cool and technical. Alexandria's water on an overcast morning. */
+[data-theme='harbour'] {
+  --primary: oklch(0.48 0.13 245);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.95 0.02 245);
+  --accent-foreground: oklch(0.3 0.08 245);
+  --ring: oklch(0.58 0.12 245);
+  --chart-1: oklch(0.55 0.14 245);
+  --chart-2: oklch(0.62 0.11 205);
+  --chart-3: oklch(0.68 0.1 175);
+  --chart-4: oklch(0.58 0.13 285);
+  --chart-5: oklch(0.72 0.09 225);
+}
+[data-theme='harbour'].dark {
+  --primary: oklch(0.74 0.12 245);
+  --primary-foreground: oklch(0.18 0.04 245);
+  --accent: oklch(0.3 0.04 245);
+  --accent-foreground: oklch(0.92 0.03 245);
+  --ring: oklch(0.66 0.12 245);
+  --chart-1: oklch(0.72 0.13 245);
+  --chart-2: oklch(0.74 0.11 205);
+  --chart-3: oklch(0.78 0.1 175);
+  --chart-4: oklch(0.7 0.13 285);
+  --chart-5: oklch(0.82 0.08 225);
+}
+
+/* Papyrus — warm earth. Sand, ink and old paper. */
+[data-theme='papyrus'] {
+  --primary: oklch(0.46 0.08 68);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.94 0.025 78);
+  --accent-foreground: oklch(0.32 0.05 68);
+  --ring: oklch(0.58 0.08 68);
+  --chart-1: oklch(0.55 0.1 68);
+  --chart-2: oklch(0.64 0.11 45);
+  --chart-3: oklch(0.7 0.1 95);
+  --chart-4: oklch(0.58 0.08 25);
+  --chart-5: oklch(0.76 0.07 78);
+}
+[data-theme='papyrus'].dark {
+  --primary: oklch(0.79 0.1 72);
+  --primary-foreground: oklch(0.21 0.03 68);
+  --accent: oklch(0.3 0.03 68);
+  --accent-foreground: oklch(0.92 0.04 78);
+  --ring: oklch(0.68 0.09 68);
+  --chart-1: oklch(0.78 0.1 68);
+  --chart-2: oklch(0.74 0.12 45);
+  --chart-3: oklch(0.82 0.1 95);
+  --chart-4: oklch(0.7 0.1 25);
+  --chart-5: oklch(0.86 0.07 78);
+}
+
+/* Meridian — deep teal. Cold, precise, instrument-like. */
+[data-theme='meridian'] {
+  --primary: oklch(0.45 0.09 192);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.94 0.025 192);
+  --accent-foreground: oklch(0.3 0.06 192);
+  --ring: oklch(0.56 0.09 192);
+  --chart-1: oklch(0.53 0.1 192);
+  --chart-2: oklch(0.62 0.1 165);
+  --chart-3: oklch(0.6 0.1 220);
+  --chart-4: oklch(0.68 0.11 140);
+  --chart-5: oklch(0.73 0.08 192);
+}
+[data-theme='meridian'].dark {
+  --primary: oklch(0.76 0.11 188);
+  --primary-foreground: oklch(0.18 0.03 192);
+  --accent: oklch(0.29 0.035 192);
+  --accent-foreground: oklch(0.92 0.04 192);
+  --ring: oklch(0.66 0.1 192);
+  --chart-1: oklch(0.74 0.11 192);
+  --chart-2: oklch(0.76 0.1 165);
+  --chart-3: oklch(0.72 0.11 220);
+  --chart-4: oklch(0.8 0.11 140);
+  --chart-5: oklch(0.84 0.07 192);
+}
+
+/* Cinnabar — warm red. The one that reads as urgent without being alarmist. */
+[data-theme='cinnabar'] {
+  --primary: oklch(0.51 0.16 32);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.95 0.025 32);
+  --accent-foreground: oklch(0.34 0.1 32);
+  --ring: oklch(0.6 0.15 32);
+  --chart-1: oklch(0.58 0.17 32);
+  --chart-2: oklch(0.66 0.14 62);
+  --chart-3: oklch(0.6 0.16 10);
+  --chart-4: oklch(0.7 0.12 92);
+  --chart-5: oklch(0.74 0.11 45);
+}
+[data-theme='cinnabar'].dark {
+  --primary: oklch(0.71 0.15 34);
+  --primary-foreground: oklch(0.19 0.04 32);
+  --accent: oklch(0.31 0.04 32);
+  --accent-foreground: oklch(0.93 0.04 32);
+  --ring: oklch(0.66 0.15 32);
+  --chart-1: oklch(0.71 0.16 32);
+  --chart-2: oklch(0.78 0.13 62);
+  --chart-3: oklch(0.7 0.16 10);
+  --chart-4: oklch(0.82 0.12 92);
+  --chart-5: oklch(0.84 0.1 45);
+}
+
+/* Basalt — violet. Cool, dark-leaning, the least "finance app" of the six. */
+[data-theme='basalt'] {
+  --primary: oklch(0.46 0.15 300);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.95 0.025 300);
+  --accent-foreground: oklch(0.32 0.09 300);
+  --ring: oklch(0.57 0.14 300);
+  --chart-1: oklch(0.54 0.16 300);
+  --chart-2: oklch(0.6 0.14 330);
+  --chart-3: oklch(0.58 0.14 270);
+  --chart-4: oklch(0.68 0.12 350);
+  --chart-5: oklch(0.72 0.1 300);
+}
+[data-theme='basalt'].dark {
+  --primary: oklch(0.75 0.13 300);
+  --primary-foreground: oklch(0.19 0.04 300);
+  --accent: oklch(0.3 0.04 300);
+  --accent-foreground: oklch(0.93 0.04 300);
+  --ring: oklch(0.66 0.13 300);
+  --chart-1: oklch(0.74 0.14 300);
+  --chart-2: oklch(0.76 0.13 330);
+  --chart-3: oklch(0.72 0.13 270);
+  --chart-4: oklch(0.82 0.11 350);
+  --chart-5: oklch(0.84 0.09 300);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -126,6 +304,26 @@
 }
 
 @layer base {
+  /*
+    Reduced motion, done the way that does not break anything (SPEC §10).
+
+    The obvious implementation — `animation: none` — would strand every Radix overlay on
+    screen: Presence keeps a closing dialog mounted until it receives `animationend`, and
+    an animation that never runs never fires one. Collapsing the duration to ~0 removes
+    all perceived motion while still producing the event, so sheets and menus still
+    unmount. Same reasoning for transitions and smooth scrolling.
+  */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
