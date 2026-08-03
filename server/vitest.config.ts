@@ -18,6 +18,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    /**
+     * Test files share one Postgres, so they must not run in parallel. Rolled-back
+     * transactions isolate a test from its own file, but not from a *different* file
+     * committing rows mid-transaction — which showed up as counts intermittently off by
+     * exactly the number of rows another file had written.
+     */
+    fileParallelism: false,
     env: {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',

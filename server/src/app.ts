@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { logger } from './logger';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
+import { fxRouter } from './modules/fx/router';
 
 const startedAt = Date.now();
 
@@ -46,7 +47,8 @@ export function createApp({ corsOrigins, requestLogging = true }: CreateAppOptio
     });
   });
 
-  // Routers land here in Phase 2 and Phase 3.
+  app.use('/api/fx', fxRouter);
+  // Remaining routers land here in Phase 3.
 
   app.use(notFoundHandler);
   app.use(errorHandler);

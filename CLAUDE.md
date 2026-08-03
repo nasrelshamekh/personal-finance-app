@@ -147,11 +147,44 @@ All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
 - `client/src/components/ui/` is shadcn-generated. Extend by wrapping, don't hand-edit. If
   you genuinely must, note it here.
 
+## FX
+
+Resolution (`server/src/lib/fx/resolve.ts`) **never touches the network** — it reads only
+what is already stored. That is what makes the app work offline and why a provider outage
+can't break a write. The only outbound call in the codebase is `POST /api/fx/refresh`.
+
+Order: identity → stored direct → stored reverse (inverted) → triangulated through EGP →
+hardcoded emergency default. Anything that isn't an exact stored match says so in
+`derivation`, so a derived rate is never passed off as a recorded one.
+
+**Rates are stored in one canonical direction, foreign → EGP.** Storing whichever
+direction the provider was asked for would let a stale manual `USD→EGP` row shadow a fresh
+API `EGP→USD` one, because resolution prefers a direct match over an inverted one. Refresh
+therefore makes one request per foreign currency rather than one `/latest/EGP` call.
+
+Staleness is measured against **the date being asked about**, not against now. For a live
+conversion those are the same thing. For a historical one it stops every figure in last
+year's history from wearing an amber dot, while still flagging a rate that was already
+stale on the date in question.
+
+`ageMs` is negative when a backdated lookup fell back to a newer rate
+(`NO_RATE_AT_OR_BEFORE_DATE`). Show `asOf` in that case, not a "time ago".
+
 ## Testing
 
 `vitest` per workspace; `npm test` at the root fans out. Route-level tests use `supertest`
 against `createApp()` from `server/src/app.ts`, which is why app construction is separate
 from `listen()`.
+
+**Server tests need Postgres running** (`npm run db:up`). Rate resolution is an ORDER BY,
+and a fake repository would test a reimplementation of the rule rather than the one that
+runs. DB-backed tests use `withRollback()` from `server/src/test/db.ts` so they never
+touch real data.
+
+`fileParallelism` is **off** in `server/vitest.config.ts`. Test files share one database,
+and a rolled-back transaction isolates a test from its own file but not from another file
+committing rows mid-transaction — which showed up as counts intermittently off by exactly
+the number of rows another file had written.
 
 ## House rules
 

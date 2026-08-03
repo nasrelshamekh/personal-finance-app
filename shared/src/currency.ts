@@ -14,8 +14,13 @@ export const currencySchema = z.enum(CURRENCIES);
 
 export type Currency = (typeof CURRENCIES)[number];
 
-/** The base currency everything normalises to. Locked in v1 (SPEC §11, D6). */
-export const BASE_CURRENCY: Currency = 'EGP';
+/**
+ * The base currency everything normalises to. Locked in v1 (SPEC §11, D6).
+ *
+ * Typed as the literal `'EGP'`, not as `Currency`, so `x === BASE_CURRENCY` narrows —
+ * which is what lets a lookup keyed by the foreign currencies stay type-safe.
+ */
+export const BASE_CURRENCY = 'EGP' as const satisfies Currency;
 
 /** The three foreign currencies, i.e. every currency that actually needs a rate. */
 export const FOREIGN_CURRENCIES = CURRENCIES.filter(

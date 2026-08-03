@@ -3,3 +3,4 @@ export * from './decimal';
 export * from './currency';
 export * from './money';
 export * from './expression';
+export * from './dto';
