@@ -1,0 +1,308 @@
+// Ledger EG — data model. See SPEC.md §5 for the rules each field exists to serve.
+//
+// Conventions:
+//   * All primary keys are UUIDs, except Setting, which is a fixed single row.
+//   * Money is Decimal(18,4); exchange rates are Decimal(18,8).
+//   * Amounts are stored SIGNED (SPEC §4.7) — income positive, expense negative,
+//     transfer outflow negative / inflow positive. A balance is a plain sum.
+//   * Derived-at-write figures (amountEgp, amountInDebtCurrency, …) are frozen on write
+//     and never recomputed on read.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Currency {
+  EGP
+  USD
+  EUR
+  GBP
+}
+
+enum AccountType {
+  CASH
+  BANK
+  WALLET
+  SAVINGS
+  CREDIT_CARD
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+}
+
+enum TxType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum DebtDirection {
+  I_OWE
+  OWED_TO_ME
+}
+
+enum DebtStatus {
+  ACTIVE
+  SETTLED
+}
+
+// Declaration order is load-bearing: Postgres sorts enums by declaration order, so
+// MANUAL sorts before API and D1's "manual wins ties" tie-break is a plain
+// `orderBy: [{ asOf: 'desc' }, { source: 'asc' }]` with no raw SQL.
+enum RateSource {
+  MANUAL
+  API
+}
+
+/// An account holds exactly one currency (SPEC §5, D3). Spending USD cash means a
+/// separate USD cash account; cross-currency movement is a transfer and nothing else.
+model Account {
+  id       String      @id @default(uuid()) @db.Uuid
+  name     String
+  type     AccountType
+  currency Currency
+
+  openingBalance Decimal  @db.Decimal(18, 4)
+  /// The three opening fields are frozen at creation so historical net worth is a
+  /// comparison of frozen figures rather than two snapshots of today's rate (D5).
+  openingDate    DateTime
+  /// Exactly 1 for EGP accounts.
+  openingRateToEgp  Decimal @db.Decimal(18, 8)
+  openingBalanceEgp Decimal @db.Decimal(18, 4)
+
+  color      String
+  icon       String
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([isArchived])
+}
+
+model Category {
+  id    String       @id @default(uuid()) @db.Uuid
+  name  String
+  kind  CategoryKind
+  color String
+  icon  String
+
+  /// Self-relation, one level of nesting only — a parent must itself have no parent.
+  /// Prisma cannot express that, so it is enforced in the zod schema and the service.
+  parentId String?    @db.Uuid
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@index([parentId])
+  @@index([kind, isArchived])
+}
+
+model Transaction {
+  id   String @id @default(uuid()) @db.Uuid
+  type TxType
+
+  /// Signed (SPEC §4.7). Always in the account's currency (D3).
+  amount   Decimal  @db.Decimal(18, 4)
+  currency Currency
+  /// Exactly 1 when currency is EGP.
+  rateToEgp Decimal @db.Decimal(18, 8)
+  /// Frozen at write time, same sign as `amount`, never recomputed on read (SPEC §4.4).
+  amountEgp Decimal @db.Decimal(18, 4)
+
+  date DateTime
+  note String?
+
+  accountId String  @db.Uuid
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  /// Null for TRANSFER rows, which are excluded from every category aggregate (D2).
+  categoryId String?   @db.Uuid
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  /// Shared by the two rows of a transfer (D2). A transfer is always exactly two rows
+  /// written in one Prisma transaction: outflow on the source, inflow on the destination.
+  transferGroupId String? @db.Uuid
+
+  /// A debt payment or savings contribution optionally mirrors into a transaction.
+  debtPaymentId String?      @unique @db.Uuid
+  debtPayment   DebtPayment? @relation(fields: [debtPaymentId], references: [id], onDelete: SetNull)
+
+  savingsContributionId String?               @unique @db.Uuid
+  savingsContribution   SavingsContribution?  @relation(fields: [savingsContributionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([accountId, date])
+  @@index([categoryId, date])
+  @@index([transferGroupId])
+}
+
+/// Balances live in the debt's own currency (D4). `remainingEgp` is a display-only
+/// conversion at the current rate and is never persisted.
+model Debt {
+  id           String        @id @default(uuid()) @db.Uuid
+  counterparty String
+  direction    DebtDirection
+  principal    Decimal       @db.Decimal(18, 4)
+  currency     Currency
+
+  startDate DateTime
+  dueDate   DateTime?
+  status    DebtStatus @default(ACTIVE)
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments DebtPayment[]
+
+  @@index([status, dueDate])
+  @@index([direction, status])
+}
+
+/// A payment may be in a different currency than the debt. All five figures are frozen
+/// at the payment date, so `principal − Σ amountInDebtCurrency` never mixes rate eras.
+model DebtPayment {
+  id     String @id @default(uuid()) @db.Uuid
+  debtId String @db.Uuid
+  debt   Debt   @relation(fields: [debtId], references: [id], onDelete: Cascade)
+
+  amount   Decimal  @db.Decimal(18, 4)
+  currency Currency
+
+  /// Exactly 1 when the payment currency equals the debt currency.
+  rateToDebtCurrency   Decimal @db.Decimal(18, 8)
+  amountInDebtCurrency Decimal @db.Decimal(18, 4)
+
+  rateToEgp Decimal @db.Decimal(18, 8)
+  amountEgp Decimal @db.Decimal(18, 4)
+
+  date DateTime
+  note String?
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction?
+
+  @@index([debtId, date])
+}
+
+model SavingsGoal {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  targetAmount Decimal  @db.Decimal(18, 4)
+  currency     Currency
+  deadline     DateTime?
+
+  color      String
+  icon       String
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  contributions SavingsContribution[]
+
+  @@index([isArchived])
+}
+
+/// Mirrors DebtPayment (D4b): progress is computed in the goal's currency, so a
+/// historical-rate contribution is never divided by a current-rate target.
+model SavingsContribution {
+  id     String      @id @default(uuid()) @db.Uuid
+  goalId String      @db.Uuid
+  goal   SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  amount   Decimal  @db.Decimal(18, 4)
+  currency Currency
+
+  /// Exactly 1 when the contribution currency equals the goal currency.
+  rateToGoalCurrency   Decimal @db.Decimal(18, 8)
+  amountInGoalCurrency Decimal @db.Decimal(18, 4)
+
+  rateToEgp Decimal @db.Decimal(18, 8)
+  amountEgp Decimal @db.Decimal(18, 4)
+
+  date DateTime
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction?
+
+  @@index([goalId, date])
+}
+
+/// EGP-only by design: budgets control spending, and spending happens in EGP (D-minor).
+model Budget {
+  id         String   @id @default(uuid()) @db.Uuid
+  categoryId String   @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  /// Always the first day of the month, at UTC midnight.
+  month    DateTime
+  limitEgp Decimal  @db.Decimal(18, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, month])
+  @@index([month])
+}
+
+/// `1 base = rate quote`. Inverse pairs are derived by division, never stored twice.
+model ExchangeRate {
+  id    String   @id @default(uuid()) @db.Uuid
+  base  Currency
+  quote Currency
+  rate  Decimal  @db.Decimal(18, 8)
+
+  /// The moment the rate takes effect — the provider's timestamp for API rows, the
+  /// moment it was typed for MANUAL rows (D1). Not "when we fetched it".
+  asOf DateTime
+  /// The provider's time_next_update_unix when it gave one; drives staleness. Null for
+  /// manual rates, which fall back to the 30h window (SPEC §4.6).
+  nextUpdateAt DateTime?
+  source       RateSource
+
+  createdAt DateTime @default(now())
+
+  @@unique([base, quote, source, asOf])
+  @@index([base, quote, asOf(sort: Desc)])
+}
+
+/// Single row, id fixed to 1 — the one table that is not UUID-keyed.
+model Setting {
+  id Int @id @default(1)
+
+  /// Locked to EGP in v1. The column exists for schema stability; the feature does
+  /// not ship (D6). Settings renders it as a disabled field.
+  baseCurrency Currency @default(EGP)
+  locale       String   @default("en-US")
+
+  rateSource      RateSource @default(MANUAL)
+  ratesApiEnabled Boolean    @default(false)
+  /// The provider's time_eol_unix, persisted on every refresh. Non-null means the
+  /// endpoint has an announced death date and Settings must warn about it (D10).
+  ratesApiEolAt DateTime?
+
+  themePreset String @default("graphite")
+  themeMode   String @default("system")
+
+  updatedAt DateTime @updatedAt
+}

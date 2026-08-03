@@ -1,6 +1,5 @@
 import pino, { type LoggerOptions } from 'pino';
-
-const isProduction = process.env.NODE_ENV === 'production';
+import { env, isProduction } from './env';
 
 // Pretty output is a dev affordance only; production emits newline-delimited JSON.
 // Spread rather than assigning `undefined` — `exactOptionalPropertyTypes` treats an
@@ -15,7 +14,7 @@ const transport: Pick<LoggerOptions, 'transport'> = isProduction
     };
 
 export const logger = pino({
-  level: process.env.LOG_LEVEL ?? (isProduction ? 'info' : 'debug'),
+  level: env.LOG_LEVEL,
   ...transport,
 });
 

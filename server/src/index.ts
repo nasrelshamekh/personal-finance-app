@@ -1,21 +1,22 @@
 import { createApp } from './app';
+import { env } from './env';
 import { logger } from './logger';
+import { prisma } from './prisma';
 
-const port = Number(process.env.PORT ?? 4000);
-const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const app = createApp({ corsOrigins: env.CORS_ORIGINS });
 
-const app = createApp({ corsOrigins });
-
-const server = app.listen(port, () => {
-  logger.info({ port, corsOrigins }, 'Ledger EG API listening');
+const server = app.listen(env.PORT, () => {
+  logger.info(
+    { port: env.PORT, corsOrigins: env.CORS_ORIGINS, nodeEnv: env.NODE_ENV },
+    'Ledger EG API listening',
+  );
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     logger.info({ signal }, 'Shutting down');
-    server.close(() => process.exit(0));
+    server.close(() => {
+      void prisma.$disconnect().finally(() => process.exit(0));
+    });
   });
 }

@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    // ES2023 for Intl.NumberFormat V3: format() accepts a decimal *string*, so a large
+    // figure is never round-tripped through a float on its way to the screen.
+    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "moduleDetection": "force",

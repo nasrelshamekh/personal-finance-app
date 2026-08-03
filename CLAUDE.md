@@ -39,9 +39,16 @@ npm run typecheck    # tsc --noEmit in all three workspaces
 npm test             # vitest run in every workspace that has tests
 ```
 
-Ports: API `4000`, client `5173`. The client proxies `/api` → `:4000`, so the client only
-ever calls same-origin relative URLs. `vite --host` is on by default so the app is
-reachable from a phone on the LAN.
+Ports: API `4000`, client `5173`, **Postgres `5433`**. The client proxies `/api` → `:4000`,
+so the client only ever calls same-origin relative URLs. `vite --host` is on by default so
+the app is reachable from a phone on the LAN.
+
+Postgres is on host port **5433**, not 5432: this machine runs a native PostgreSQL 18
+service that already owns 5432, and host connections silently landed on it instead of the
+container. The container-side port is still 5432 — only the host mapping moved.
+
+`prisma generate` fails with `EPERM` on Windows if the dev server is running, because tsx
+holds the query-engine DLL open. Stop `npm run dev` before migrating.
 
 ## Environment
 
@@ -81,6 +88,18 @@ Read SPEC §4 in full before touching anything that holds a figure. The short ve
 5. **Accounts are single-currency.** A transaction's currency must equal its account's,
    enforced in zod *and* in the service. Cross-currency movement is a transfer, nothing else.
 6. Store 4dp, display 2dp, round half-up.
+
+**Import `Decimal` from `@ledger/shared`, never from `decimal.js` directly.**
+`shared/src/decimal.ts` raises precision to 40 significant digits — decimal.js defaults to
+20, which is barely above what a `Decimal(18,4)` column holds, so a chained division could
+exhaust its headroom before the result was ever rounded. It is a global `Decimal.set`, not
+a `Decimal.clone()`, on purpose: a clone is a different constructor whose instances fail
+`instanceof Decimal`, which would reintroduce the two-Decimal-classes problem.
+
+`Intl.NumberFormat.format()` is given a decimal **string**, never a number, so large
+figures don't round-trip through a float. That needs `lib: ["ES2023"]` in every tsconfig,
+plus the single `asNumericLiteral` assertion in `shared/src/money.ts` — TypeScript models
+`Intl.StringNumericLiteral` as a template literal type no computed string can satisfy.
 
 ## Server module pattern
 
