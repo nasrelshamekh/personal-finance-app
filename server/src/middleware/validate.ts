@@ -1,5 +1,6 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import type { ZodTypeAny, z } from 'zod';
+import { AppError } from '../lib/errors';
 
 /**
  * Validates and *replaces* the request parts with their parsed values, so handlers work
@@ -18,6 +19,22 @@ export interface Validated<S extends ValidationSchemas> {
   body: S['body'] extends ZodTypeAny ? z.infer<S['body']> : unknown;
   query: S['query'] extends ZodTypeAny ? z.infer<S['query']> : unknown;
   params: S['params'] extends ZodTypeAny ? z.infer<S['params']> : unknown;
+}
+
+/**
+ * Reads the `:id` path parameter.
+ *
+ * Express 5 types `req.params[k]` as `string | string[] | undefined`, which a route with
+ * a single `:id` segment can never actually be. This narrows it with a real check rather
+ * than a cast, so a routing mistake surfaces as a 400 instead of `undefined` reaching a
+ * database query.
+ */
+export function pathId(req: Request): string {
+  const { id } = req.params;
+  if (typeof id !== 'string') {
+    throw AppError.badRequest('This route needs an id in the path.');
+  }
+  return id;
 }
 
 export function validate(schemas: ValidationSchemas): RequestHandler {

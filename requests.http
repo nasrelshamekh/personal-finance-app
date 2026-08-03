@@ -1,0 +1,417 @@
+### Ledger EG — every endpoint, in the order you'd actually use them.
+###
+### Works with the VS Code REST Client extension and JetBrains HTTP Client.
+### Start the API first:  npm run db:up  &&  npm run dev
+###
+### Requests are ordered so the @variables fill themselves in as you go: run the
+### "create" ones once, then everything below them works. Run them top to bottom the
+### first time.
+
+@host = http://localhost:4000/api
+@contentType = application/json
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Health
+### ─────────────────────────────────────────────────────────────────────────────
+
+# @name health
+GET {{host}}/health
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Settings
+### ─────────────────────────────────────────────────────────────────────────────
+
+# @name getSettings
+GET {{host}}/settings
+
+###
+# Base currency is locked to EGP in v1 (D6) — this returns 422, on purpose.
+PUT {{host}}/settings
+Content-Type: {{contentType}}
+
+{ "baseCurrency": "USD" }
+
+###
+PUT {{host}}/settings
+Content-Type: {{contentType}}
+
+{ "themePreset": "harbour", "themeMode": "dark" }
+
+###
+# Automatic rate fetching is on by default (D12). Turn it off to work fully offline.
+PUT {{host}}/settings
+Content-Type: {{contentType}}
+
+{ "ratesApiEnabled": true }
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### FX
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Tops rates up automatically if they have gone stale, then returns them.
+# @name rates
+GET {{host}}/fx/rates
+
+###
+# Read without fetching — useful when you want to see exactly what is stored.
+GET {{host}}/fx/rates?refresh=false
+
+###
+# The raw stored rows behind those figures.
+GET {{host}}/fx/rates/stored
+
+###
+# Force a refresh. 422 if automatic rates are switched off in Settings.
+POST {{host}}/fx/refresh
+
+###
+# The manual override — the escape hatch for a parallel-market or bank rate.
+PUT {{host}}/fx/manual
+Content-Type: {{contentType}}
+
+{ "base": "USD", "quote": "EGP", "rate": "52.7500" }
+
+###
+# Conversion. `amount` accepts arithmetic, same parser as the client (SPEC §8).
+GET {{host}}/fx/convert?amount=1200*3%2B450&from=USD&to=EGP
+
+###
+# Triangulated through EGP — neither side is the base currency.
+GET {{host}}/fx/convert?amount=100&from=EUR&to=GBP
+
+###
+# Backdated: no rate exists that far back, so this comes back stale with
+# staleReason NO_RATE_AT_OR_BEFORE_DATE and a negative ageMs (D11/D12).
+GET {{host}}/fx/convert?amount=100&from=USD&to=EGP&date=2026-02-01
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Accounts
+### ─────────────────────────────────────────────────────────────────────────────
+
+# @name createCashAccount
+POST {{host}}/accounts
+Content-Type: {{contentType}}
+
+{
+  "name": "Cash (EGP)",
+  "type": "CASH",
+  "currency": "EGP",
+  "openingBalance": "15000",
+  "color": "#2f8f5b",
+  "icon": "wallet"
+}
+
+@cashAccountId = {{createCashAccount.response.body.id}}
+
+###
+# @name createUsdAccount
+POST {{host}}/accounts
+Content-Type: {{contentType}}
+
+{
+  "name": "Bank (USD)",
+  "type": "BANK",
+  "currency": "USD",
+  "openingBalance": "2000",
+  "color": "#4a6f9f",
+  "icon": "landmark"
+}
+
+@usdAccountId = {{createUsdAccount.response.body.id}}
+
+###
+# Balances are derived, never stored: opening balance plus a plain sum of signed amounts.
+GET {{host}}/accounts
+
+###
+GET {{host}}/accounts?includeArchived=true
+
+###
+GET {{host}}/accounts/{{cashAccountId}}
+
+###
+PATCH {{host}}/accounts/{{cashAccountId}}
+Content-Type: {{contentType}}
+
+{ "name": "Cash on hand" }
+
+###
+# Rejected: a hex colour is required.
+POST {{host}}/accounts
+Content-Type: {{contentType}}
+
+{ "name": "Bad", "type": "CASH", "currency": "EGP", "color": "green", "icon": "wallet" }
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Categories
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Tree-shaped: roots with their children nested one level.
+GET {{host}}/categories
+
+###
+GET {{host}}/categories?kind=EXPENSE
+
+###
+# @name createParentCategory
+POST {{host}}/categories
+Content-Type: {{contentType}}
+
+{ "name": "Food", "kind": "EXPENSE", "color": "#b06a3f", "icon": "utensils" }
+
+@parentCategoryId = {{createParentCategory.response.body.id}}
+
+###
+# @name createChildCategory
+POST {{host}}/categories
+Content-Type: {{contentType}}
+
+{
+  "name": "Groceries",
+  "kind": "EXPENSE",
+  "color": "#8f7a3f",
+  "icon": "shopping-basket",
+  "parentId": "{{parentCategoryId}}"
+}
+
+@childCategoryId = {{createChildCategory.response.body.id}}
+
+###
+# Rejected: categories nest one level only (SPEC §5).
+POST {{host}}/categories
+Content-Type: {{contentType}}
+
+{
+  "name": "Fruit",
+  "kind": "EXPENSE",
+  "color": "#8f7a3f",
+  "icon": "apple",
+  "parentId": "{{childCategoryId}}"
+}
+
+###
+GET {{host}}/categories/{{parentCategoryId}}
+
+###
+PATCH {{host}}/categories/{{childCategoryId}}
+Content-Type: {{contentType}}
+
+{ "color": "#7f7f7f" }
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Transactions
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Amounts are entered as magnitudes; the sign comes from the type (SPEC §4.7).
+# @name createIncome
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "INCOME",
+  "amount": "18000",
+  "accountId": "{{cashAccountId}}",
+  "date": "2026-08-01",
+  "note": "Salary"
+}
+
+@incomeId = {{createIncome.response.body.id}}
+
+###
+# The amount field accepts arithmetic — this stores -4050.0000.
+# @name createExpense
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "EXPENSE",
+  "amount": "1200*3+450",
+  "accountId": "{{cashAccountId}}",
+  "categoryId": "{{childCategoryId}}",
+  "date": "2026-08-03",
+  "note": "Groceries for the month"
+}
+
+@expenseId = {{createExpense.response.body.id}}
+
+###
+# Rejected (422): an account is single-currency (D3).
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "EXPENSE",
+  "amount": "100",
+  "currency": "USD",
+  "accountId": "{{cashAccountId}}",
+  "date": "2026-08-03"
+}
+
+###
+# Rejected (400): the sign comes from the type, so a negative amount is a mistake.
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "EXPENSE",
+  "amount": "-100",
+  "accountId": "{{cashAccountId}}",
+  "date": "2026-08-03"
+}
+
+###
+# Backdated far enough that no rate exists at-or-before it: saves anyway, and comes
+# back with rateIsApproximate true (D12).
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "EXPENSE",
+  "amount": "75",
+  "accountId": "{{usdAccountId}}",
+  "date": "2026-02-14",
+  "note": "Backdated — flagged, not blocked"
+}
+
+###
+# Cross-currency transfer. Both sides are entered: what left is $500, what arrived is
+# 24,000 EGP, and the gap is the bank's spread, not the mid-market rate (D2).
+# @name createTransfer
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "TRANSFER",
+  "fromAccountId": "{{usdAccountId}}",
+  "toAccountId": "{{cashAccountId}}",
+  "fromAmount": "500",
+  "toAmount": "24000",
+  "date": "2026-08-03",
+  "note": "Wire to EGP"
+}
+
+@transferFromId = {{createTransfer.response.body.from.id}}
+@transferGroupId = {{createTransfer.response.body.transferGroupId}}
+
+###
+# Same-currency transfer: toAmount is optional and mirrors fromAmount.
+POST {{host}}/transactions
+Content-Type: {{contentType}}
+
+{
+  "type": "TRANSFER",
+  "fromAccountId": "{{cashAccountId}}",
+  "toAccountId": "{{usdAccountId}}",
+  "fromAmount": "100",
+  "date": "2026-08-04"
+}
+
+###
+# Check both balances moved correctly after the transfer.
+GET {{host}}/accounts
+
+###
+# The transfer seen as one thing, including what the conversion cost.
+GET {{host}}/transactions/transfers/{{transferGroupId}}
+
+###
+GET {{host}}/transactions?page=1&pageSize=25
+
+###
+GET {{host}}/transactions?type=EXPENSE
+
+###
+GET {{host}}/transactions?accountId={{cashAccountId}}
+
+###
+GET {{host}}/transactions?from=2026-08-01&to=2026-08-31
+
+###
+# Case-insensitive substring of the note, deliberately note-only.
+GET {{host}}/transactions?q=groceries
+
+###
+# Compared against the magnitude of amountEgp, so it finds expenses too.
+GET {{host}}/transactions?minAmount=1000&maxAmount=50000
+
+###
+GET {{host}}/transactions?currency=USD
+
+###
+GET {{host}}/transactions/{{expenseId}}
+
+###
+# Editing the note leaves the frozen rate alone (SPEC §4.4).
+PATCH {{host}}/transactions/{{expenseId}}
+Content-Type: {{contentType}}
+
+{ "note": "Groceries — corrected note" }
+
+###
+# Editing the amount re-freezes rateToEgp, amountEgp and rateAsOf.
+PATCH {{host}}/transactions/{{expenseId}}
+Content-Type: {{contentType}}
+
+{ "amount": "3900" }
+
+###
+# Rejected (422): a transfer has two sides — use fromAmount / toAmount.
+PATCH {{host}}/transactions/{{transferFromId}}
+Content-Type: {{contentType}}
+
+{ "amount": "600" }
+
+###
+# Adjust what actually landed on the destination side.
+PATCH {{host}}/transactions/{{transferFromId}}
+Content-Type: {{contentType}}
+
+{ "toAmount": "24250" }
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Dashboard
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Everything the dashboard needs, in one call. Also tops rates up (D12).
+GET {{host}}/dashboard?month=2026-08
+
+###
+# Defaults to the current month.
+GET {{host}}/dashboard
+
+###
+# Rejected: month must be YYYY-MM.
+GET {{host}}/dashboard?month=August
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Deleting — run these last
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Deleting either row of a transfer removes both: it is one movement of money.
+DELETE {{host}}/transactions/{{transferFromId}}
+
+###
+DELETE {{host}}/transactions/{{incomeId}}
+
+###
+# An account holding transactions is archived, not deleted, so its history survives.
+DELETE {{host}}/accounts/{{cashAccountId}}
+
+###
+# A category still referenced by a transaction is archived for the same reason.
+DELETE {{host}}/categories/{{childCategoryId}}
+
+###
+# 404 in the standard error shape.
+GET {{host}}/accounts/00000000-0000-0000-0000-000000000000
+
+###
+# 400 — not a uuid.
+GET {{host}}/accounts/not-a-uuid

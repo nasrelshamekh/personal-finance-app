@@ -33,6 +33,29 @@ export const monthString = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Must be a month, e.g. 2026-08');
 
+/** Every list endpoint takes these (SPEC §7). Query values arrive as strings. */
+export const paginationQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(200).default(25),
+});
+
+export const idParamSchema = z.object({
+  id: z.string().uuid('That is not a valid id.'),
+});
+
+/** Hex colour, as stored on accounts, categories and goals. */
+export const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a hex colour, e.g. #2f8f5b');
+
+/** A lucide icon name. Not validated against the icon set — that would date badly. */
+export const iconName = z.string().min(1).max(40);
+
+/**
+ * An amount the user typed. Accepted as a string because it may be arithmetic —
+ * `1200*3+450` — which the service evaluates with the shared parser (SPEC §8). Validating
+ * the arithmetic here would duplicate the parser inside a schema.
+ */
+export const amountInput = z.string().min(1, 'Enter an amount.').max(200);
+
 export interface PaginationMeta {
   page: number;
   pageSize: number;

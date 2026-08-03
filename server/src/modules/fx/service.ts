@@ -3,7 +3,6 @@ import {
   BASE_CURRENCY,
   FOREIGN_CURRENCIES,
   RATE_ATTRIBUTION,
-  evaluateExpression,
   type AutoRefreshOutcome,
   type Currency,
   type FxConvertResponse,
@@ -18,6 +17,7 @@ import {
 import { env } from '../../env';
 import { logger } from '../../logger';
 import { AppError } from '../../lib/errors';
+import { parseAmount } from '../../lib/amount';
 import { getSettings, SETTINGS_ID } from '../../lib/settings';
 import { convert, div, mul, sub, toRateString, toStorageString } from '../../lib/money';
 import {
@@ -147,23 +147,16 @@ export async function convertAmount(
   input: { amount: string; from: Currency; to: Currency; date?: Date },
 ): Promise<FxConvertResponse> {
   // The same parser the client previews with, so `1200*3` works here too (SPEC §8).
-  const parsed = evaluateExpression(input.amount);
-  if (!parsed.ok) {
-    throw AppError.badRequest(parsed.error.message, {
-      field: 'amount',
-      code: parsed.error.code,
-      position: parsed.error.position,
-    });
-  }
+  const amount = parseAmount(input.amount, 'amount');
 
   const at = input.date ?? new Date();
   const rate = await getRate(db, input.from, input.to, at);
 
   return {
-    amount: toStorageString(parsed.value),
+    amount: toStorageString(amount),
     from: input.from,
     to: input.to,
-    result: toStorageString(convert(parsed.value, rate.rate)),
+    result: toStorageString(convert(amount, rate.rate)),
     rate: toDto(rate),
   };
 }

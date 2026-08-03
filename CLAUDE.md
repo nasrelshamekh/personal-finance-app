@@ -119,6 +119,25 @@ Express 5 specifics:
   `PrismaClientKnownRequestError` (P2002 → 409, P2025 → 404) to
   `{ error: { code, message, details? } }`. No stack traces when `NODE_ENV=production`.
 
+## Writing a money-bearing row
+
+Income and expense are entered as **magnitudes**; the sign comes from the type
+(`TX_SIGN` in `shared/src/enums.ts`). A negative amount is rejected rather than quietly
+flipped, because a negative expense is income.
+
+`freeze()` in the transactions service resolves the rate once and returns
+`{ rateToEgp, amountEgp, rateAsOf }`. Re-freeze **only** when the amount, currency or date
+changes — editing a note or a category must never change what a transaction was worth.
+
+A transfer is two rows sharing a `transferGroupId`, written through `inTransaction()` from
+`server/src/lib/tx.ts`. That helper opens a transaction when handed the client and runs
+inline when handed a transaction client, which is what lets a service be called both from
+a router and from inside a test's rollback.
+
+Deleting either row of a transfer deletes both. Deleting an account or category that
+anything still references **archives** it instead — removing it would either orphan
+history or take history with it, and both rewrite past figures.
+
 ## Client feature pattern
 
 Every folder under `client/src/features/<name>/` owns its components, its `api.ts` (typed

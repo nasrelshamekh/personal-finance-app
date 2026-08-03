@@ -334,8 +334,13 @@ Every money-bearing row therefore stores **`rateAsOf`**: the `asOf` of the rate 
 The rule is a comparison, not a stored boolean:
 
 ```
-approximate  ⟺  rateAsOf > date        (the rate post-dates the transaction)
+approximate  ⟺  utcDay(rateAsOf) > utcDay(date)
 ```
+
+At **day** granularity, deliberately. Rates move once a day, so a rate recorded at 11:00 is the
+right rate for a transaction dated 09:00 that same day. Comparing timestamps would flag every
+expense entered a few hours after it happened — which is most of them — and an indicator that
+fires constantly says nothing.
 
 Rows where that holds are marked in the UI — the same amber treatment as a stale figure, with a
 tooltip naming both dates ("rate from 3 Aug, transaction dated 12 Mar"). The manual override on

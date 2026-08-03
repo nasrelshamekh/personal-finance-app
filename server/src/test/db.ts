@@ -31,3 +31,15 @@ export async function withRollback(
 export async function clearRates(tx: Prisma.TransactionClient): Promise<void> {
   await tx.exchangeRate.deleteMany({});
 }
+
+/**
+ * Clears categories children-first.
+ *
+ * `Category.parentId` is `onDelete: Restrict` and Postgres checks that immediately, so a
+ * single `deleteMany({})` can trip the constraint when a parent happens to be removed
+ * before its child. Two statements, and the order is no longer luck.
+ */
+export async function clearCategories(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.category.deleteMany({ where: { parentId: { not: null } } });
+  await tx.category.deleteMany({});
+}

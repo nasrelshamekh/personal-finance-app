@@ -5,6 +5,11 @@ import pinoHttp from 'pino-http';
 import { logger } from './logger';
 import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import { fxRouter } from './modules/fx/router';
+import { accountsRouter } from './modules/accounts/router';
+import { categoriesRouter } from './modules/categories/router';
+import { transactionsRouter } from './modules/transactions/router';
+import { dashboardRouter } from './modules/dashboard/router';
+import { settingsRouter } from './modules/settings/router';
 
 const startedAt = Date.now();
 
@@ -48,7 +53,12 @@ export function createApp({ corsOrigins, requestLogging = true }: CreateAppOptio
   });
 
   app.use('/api/fx', fxRouter);
-  // Remaining routers land here in Phase 3.
+  app.use('/api/accounts', accountsRouter);
+  app.use('/api/categories', categoriesRouter);
+  app.use('/api/transactions', transactionsRouter);
+  app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/settings', settingsRouter);
+  // Debts, savings and budgets land in Phase 6; export/import in Phase 8.
 
   app.use(notFoundHandler);
   app.use(errorHandler);
