@@ -1,0 +1,5 @@
+# Keep line endings stable across the Windows host and the Linux Postgres container.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.woff2 binary

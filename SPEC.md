@@ -1,14 +1,8 @@
 # SPEC.md — Ledger EG (personal finance manager)
 
-> **How to use this file:** drop it in the root of an empty repo, then in Claude Code run:
->
-> ```
-> Read SPEC.md fully. Do not write any code yet. Summarise the plan back to me in
-> ~15 lines, list every assumption you're making, and list anything in the spec
-> that is ambiguous or that you disagree with. Then wait.
-> ```
->
-> After you approve: `Implement Phase 0 and Phase 1 only. Run the acceptance checks at the end of each phase, then stop and report.`
+> **Status:** this file is the single source of truth. Decisions D1–D11 from `DECISIONS.md`
+> have been folded in; `DECISIONS.md` remains as a changelog of what changed and why.
+> Where this file and `DECISIONS.md` still appear to differ, this file wins.
 
 ---
 
@@ -49,12 +43,26 @@ It is not a SaaS. There is no signup, no multi-tenancy, no billing. Optimise for
 - `pino` + `pino-http` for logging
 - `helmet`, `cors`
 
+**Shared** (`shared/` workspace — D7)
+- `decimal.js` (the expression parser returns `Decimal` on both sides)
+- `zod` (the DTO schemas both sides validate against)
+
 **Tooling**
 - npm workspaces, `tsx` for dev, `vitest` for tests
+- `concurrently` for the root `dev` script, colour-prefixed streams (D8)
+- `supertest` for route-level tests (D-assumptions)
+- `@fontsource-variable/inter-tight` + `@fontsource-variable/jetbrains-mono`, self-hosted (D9)
 - ESLint + Prettier
 - Docker Compose for Postgres only (app runs on host in dev)
 
 **Do not add any dependency not listed here without asking me first.** In particular: no state management library beyond TanStack Query + React context, no `mathjs`, no ORM other than Prisma, no UI kit other than shadcn/ui.
+
+**Decimal discipline across boundaries.** `Prisma.Decimal` and `decimal.js` must never coexist as
+live values. Prisma returns `Prisma.Decimal` → `.toString()` immediately at the Prisma boundary →
+`decimal.js` for all arithmetic inside services → `.toFixed(4)` string on the way out to JSON.
+Strings are the only interchange format, so the wire format and the DB format are the same thing.
+`decimal.js` instances are free to move within app code (`money.ts` returns them by design); what is
+forbidden is a `Prisma.Decimal` escaping the repository layer, or any `Decimal` being serialised.
 
 ---
 
@@ -66,7 +74,14 @@ It is not a SaaS. There is no signup, no multi-tenancy, no billing. Optimise for
 ├── package.json                # npm workspaces root, top-level scripts
 ├── .env.example
 ├── SPEC.md
+├── DECISIONS.md                # changelog of D1–D11, folded into this spec
 ├── CLAUDE.md                   # you will generate this in Phase 0
+├── shared/                     # leaf workspace — never imports Prisma, client or server
+│   └── src/
+│       ├── expression.ts       # single shunting-yard implementation, used by both sides
+│       ├── currency.ts         # Currency union + money formatting helpers
+│       ├── money.ts            # display-only formatting shared by both sides
+│       └── dto/                # API DTO types + zod schemas both sides validate against
 ├── server/
 │   ├── prisma/
 │   │   ├── schema.prisma
@@ -107,6 +122,16 @@ It is not a SaaS. There is no signup, no multi-tenancy, no billing. Optimise for
 
 **Module pattern (server):** every module is exactly three files — `schema.ts` (zod in/out), `service.ts` (all Prisma + business logic, no `req`/`res`), `router.ts` (thin, validates then calls service). Routers never touch Prisma directly.
 
+**Where schemas live (D7).** `shared/src/dto/` owns the wire contract: response DTO types and the
+request schemas both sides validate against. A server module's `schema.ts` re-exports those and
+extends them with server-only concerns (query coercion, params, pagination). The client imports the
+same DTOs, which is where the end-to-end typing comes from. `shared/` stays leaf-level: it imports
+neither Prisma nor anything from `client/` or `server/`.
+
+**The `Currency` enum exists twice by necessity** — once in `schema.prisma`, once as a zod enum in
+`shared/src/currency.ts` — because `shared/` cannot import Prisma. A compile-time assertion in the
+server keeps the two member lists identical; if you add a currency, both must change.
+
 **Feature pattern (client):** every feature folder owns its components, its `api.ts` (typed fetch calls), and its `queries.ts` (TanStack Query hooks + query key factory). Components never call `fetch` directly.
 
 ---
@@ -119,10 +144,20 @@ These are the rules I care about most. Get them wrong and the app is worthless.
 2. **Money crosses the wire as a string.** `{ "amount": "1250.0000", "currency": "USD" }`. Never a float. The client parses to `Decimal` only when it needs arithmetic, and formats via `Intl.NumberFormat` for display.
 3. **Every transaction stores three things:** the original `amount` + `currency`, the `rateToEgp` used at the time, and the derived `amountEgp`. Rates change; history must not.
 4. **`amountEgp` is computed once on write, never recomputed on read.** If I edit a transaction's date or amount, recompute it then, and only then.
-5. **Rounding:** store 4 decimal places, display 2. Round half-up at display time only.
-6. **Exchange rates have a `fetchedAt` and a `source`.** If the newest rate for a pair is older than 24h, the UI must visibly mark converted totals as stale — a subtle amber dot next to the figure with a tooltip giving the rate's age. Do not hide this.
+5. **Rounding:** store 4 decimal places, display 2. Round half-up. Persisting a derived
+   `amountEgp` rounds to 4dp at write time; that is storage precision, not display rounding.
+6. **Exchange rates have an `asOf` and a `source`.** `asOf` means "the moment this rate takes
+   effect" — the provider's own timestamp for `API` rows, the moment I typed it for `MANUAL` rows.
+   A rate is stale once `now` is past its `nextUpdateAt`, or — when the provider gave no
+   `nextUpdateAt` — once it is more than **30h** old. Stale converted totals are visibly marked: a
+   subtle amber dot next to the figure with a tooltip giving the rate's age. Do not hide this.
+7. **Amounts are stored signed.** `INCOME` is positive, `EXPENSE` is negative, and a `TRANSFER`
+   pair is negative on the outflow row and positive on the inflow row. `amountEgp` carries the same
+   sign as `amount`. An account balance is therefore a plain sum with no type-dependent branching,
+   and D5's net-worth formula holds without special cases. Display flips the sign where a bare
+   magnitude reads better; storage never does.
 
-Write `server/src/lib/money.ts` first, with `toDecimal`, `add`, `sub`, `mul`, `div`, `convert(amount, rate)`, `formatEgp`, `format(amount, currency)`. Unit-test it before anything else uses it. Mirror a display-only version in `client/src/lib/money.ts`.
+Write `server/src/lib/money.ts` first, with `toDecimal`, `add`, `sub`, `mul`, `div`, `convert(amount, rate)`, `formatEgp`, `format(amount, currency)`. Unit-test it before anything else uses it. The display-only half (`format`, `formatEgp`) lives in `shared/src/money.ts` so client and server format identically; `client/src/lib/money.ts` re-exports it.
 
 ---
 
@@ -136,30 +171,94 @@ enum AccountType { CASH BANK WALLET SAVINGS CREDIT_CARD }
 enum TxType { INCOME EXPENSE TRANSFER }
 enum DebtDirection { I_OWE OWED_TO_ME }
 enum DebtStatus { ACTIVE SETTLED }
-enum RateSource { MANUAL API }
+enum RateSource { MANUAL API }   // declaration order is load-bearing — see ExchangeRate
 ```
 
-**Account** — id, name, type, currency, openingBalance (Decimal), color, icon, isArchived, createdAt. Current balance is derived, never stored.
+All primary keys are UUIDs (`@db.Uuid`), for consistency with `Transaction.transferGroupId`.
+
+**Account** — id, name, type, currency, openingBalance (Decimal), **openingDate (DateTime)**,
+**openingRateToEgp (Decimal(18,8))**, **openingBalanceEgp (Decimal)**, color, icon, isArchived,
+createdAt. The three opening fields are frozen at account creation (D5); `openingBalanceEgp` is
+derived once and stored, which is what makes historical net worth a comparison of frozen figures
+rather than two snapshots of today's rate. For EGP accounts `openingRateToEgp` is exactly `1`.
+Current balance is derived, never stored.
+
+**Accounts are single-currency (D3).** A transaction's `currency` must equal its account's
+`currency` — enforced in the zod schema *and* at the service layer. If I spend USD cash, that is a
+separate USD cash account. Native balance is then exact arithmetic over same-currency rows, and
+`balanceEgp` is a sum of frozen `amountEgp` values. Cross-currency movement has exactly one
+representation: a transfer. For EGP accounts `rateToEgp` is always exactly `1`.
 
 **Category** — id, name, kind (INCOME | EXPENSE), color, icon, parentId (self-relation, one level of nesting only), isArchived.
 
-**Transaction** — id, type, amount (Decimal), currency, rateToEgp (Decimal), amountEgp (Decimal), date (DateTime), note, accountId, categoryId (nullable for TRANSFER), transferAccountId (nullable, only for TRANSFER), debtPaymentId (nullable), savingsContributionId (nullable), createdAt, updatedAt. Index on `(date)` and `(accountId, date)`.
+**Transaction** — id, type, amount (Decimal, **signed** — see §4.7), currency, rateToEgp (Decimal), amountEgp (Decimal, signed), date (DateTime), note, accountId, categoryId (nullable for TRANSFER), **transferGroupId (String? @db.Uuid, indexed — only for TRANSFER)**, debtPaymentId (nullable), savingsContributionId (nullable), createdAt, updatedAt. Index on `(date)`, `(accountId, date)` and `(transferGroupId)`.
 
-**Debt** — id, counterparty, direction, principal (Decimal), currency, interestRatePct (Decimal, nullable, simple interest only), startDate, dueDate (nullable), status, note. Remaining balance is derived from payments.
+**Transfers are two linked rows (D2).** A transfer writes two `TRANSFER` rows in one Prisma
+transaction sharing a `transferGroupId`: an outflow on the source account in the source account's
+currency (negative), and an inflow on the destination account in the destination account's currency
+(positive). Each row freezes its own `amount`, `currency`, `rateToEgp`, `amountEgp` independently,
+exactly like any other row.
 
-**DebtPayment** — id, debtId, amount, currency, rateToEgp, amountEgp, date, note.
+For a cross-currency transfer **I enter both sides.** The form pre-fills the destination amount
+from the current rate and I can overwrite it. That is the point, not a convenience: when $500 lands
+in my EGP account the amount that actually arrives reflects the bank's spread, not the mid-market
+rate, and forcing the app's rate onto the destination would make the balance wrong.
+
+**Aggregation rule:** `TRANSFER` rows are excluded from every income / expense / category / budget
+aggregate. They affect account balances and nothing else.
+
+**Conversion cost (D2).** Where a transfer group's two rows have different currencies, the
+difference between the outflow's `amountEgp` and the inflow's `amountEgp` is the real cost of the
+conversion. Expose it as a derived `conversionCostEgp` per group and surface the monthly total on
+the dashboard as "Cost of converting."
+
+**Debt** — id, counterparty, direction, principal (Decimal), currency, startDate, dueDate (nullable), status, note. Remaining balance is derived from payments.
+
+**Debt balances live in the debt's native currency (D4).** `remaining = principal − Σ
+amountInDebtCurrency`, computed entirely in the debt's currency. `remainingEgp` is a display-only
+conversion at the current rate and carries the same stale flag as any other live conversion. Never
+subtract historical-rate payments from a current-rate principal.
+
+**DebtPayment** — id, debtId, amount, currency, **rateToDebtCurrency (Decimal(18,8))**,
+**amountInDebtCurrency (Decimal)**, rateToEgp, amountEgp, date, note. Payments may be in a
+different currency than the debt; all five figures are frozen at the payment date. Verbose, but
+every figure is defensible. Where payment currency equals debt currency, `rateToDebtCurrency` is
+exactly `1`.
 
 **SavingsGoal** — id, name, targetAmount (Decimal), currency, deadline (nullable), color, icon, isArchived.
 
-**SavingsContribution** — id, goalId, amount, currency, rateToEgp, amountEgp, date.
+**SavingsContribution** — id, goalId, amount, currency, **rateToGoalCurrency (Decimal(18,8))**,
+**amountInGoalCurrency (Decimal)**, rateToEgp, amountEgp, date.
 
-**Budget** — id, categoryId, month (first day of month, DateTime), limitEgp (Decimal). Unique on `(categoryId, month)`.
+**Savings progress mirrors debts (D4b).** This is the same incoherence D4 removed from debts:
+a goal has its own currency, so `savedEgp ÷ targetAmount` would divide historical-rate
+contributions by a current-rate target. Progress is therefore computed in the **goal's** currency —
+`saved = Σ amountInGoalCurrency`, `progressPct = saved ÷ targetAmount` — and `savedEgp` is a
+display-only conversion carrying the stale flag. `monthlyNeeded` is likewise in the goal's currency,
+and is `null` when the goal has no deadline.
 
-**ExchangeRate** — id, base (Currency), quote (Currency), rate (Decimal(18,8)), fetchedAt, source (RateSource). Unique on `(base, quote, fetchedAt)`. Index on `(base, quote, fetchedAt desc)`.
+**Budget** — id, categoryId, month (first day of month, DateTime), limitEgp (Decimal). Unique on `(categoryId, month)`. Budgets are EGP-only, deliberately: budgets control spending and I spend in EGP, so a multi-currency budget would need a rate policy that adds nothing.
 
-**Setting** — single-row table (id fixed to `1`): baseCurrency (default EGP), locale, rateSource, ratesApiEnabled (bool), themePreset, themeMode, updatedAt.
+**ExchangeRate** — id, base (Currency), quote (Currency), rate (Decimal(18,8)), **asOf (DateTime)**, **nextUpdateAt (DateTime?)**, source (RateSource). Unique on **`(base, quote, source, asOf)`**. Index on `(base, quote, asOf desc)`.
 
-**Seed** (`prisma/seed.ts`): one EGP cash account, one USD bank account, ~14 sensible categories (Salary, Freelance, Rent, Groceries, Transport, Utilities, Internet, Eating out, Health, Subscriptions, Hardware, Gifts, Transfer fees, Other), a default settings row, and one seeded rate per pair so the app is never empty on first run.
+`nextUpdateAt` holds the provider's `time_next_update_unix` when it gave one, and drives the
+staleness rule in §4.6; it is null for manual rates, which fall back to the 30h window.
+
+Because `MANUAL` is declared before `API` in `enum RateSource`, Postgres sorts `MANUAL` first, so
+D1's tie-break needs no raw SQL — `orderBy: [{ asOf: 'desc' }, { source: 'asc' }]` is sufficient.
+
+**Setting** — single-row table (id fixed to `1`): baseCurrency (default EGP, **locked** — see §11), locale, rateSource, ratesApiEnabled (bool), **ratesApiEolAt (DateTime?)**, themePreset, themeMode, updatedAt.
+
+`ratesApiEolAt` persists the provider's `time_eol_unix` (D10); non-null means the endpoint has an
+announced death date and Settings must warn about it.
+
+**Seed** (`prisma/seed.ts`): one EGP cash account, one USD bank account, ~14 sensible categories (Salary, Freelance, Rent, Groceries, Transport, Utilities, Internet, Eating out, Health, Subscriptions, Hardware, Gifts, Transfer fees, Other), a default settings row, and one seeded rate per pair so the app is never empty on first run. Seed rates, verified 2026-08-03, written as `source: MANUAL`, `asOf: 2026-08-03` — a starting point, not a claim of accuracy:
+
+| Pair | Rate |
+|---|---|
+| USD → EGP | 51.1232 |
+| EUR → EGP | 58.86 |
+| GBP → EGP | 68.81 |
 
 ---
 
@@ -179,10 +278,44 @@ Two implementations:
 - **`ApiRateProvider`** — `GET https://open.er-api.com/v6/latest/{BASE}` (free, no API key, includes EGP). Only used when `ratesApiEnabled` is true in settings.
 
 Behaviour:
-- `getRate(base, quote, atDate?)` returns the newest rate at or before `atDate` (default now). Falls back to the newest rate overall, then to a hardcoded emergency default, and flags the result as `stale: true` in either fallback case.
+
+**`getRate(base, quote, atDate?)` resolution order (D1):**
+1. `WHERE base, quote, asOf <= atDate` → `ORDER BY asOf DESC, source ASC` (MANUAL first) → take first.
+2. Nothing at-or-before → newest row overall, `stale: true`, reason `NoRateAtOrBeforeDate`.
+3. No rows at all → hardcoded emergency default, `stale: true`, reason `NoRateAtAll`.
+
+The result carries the `asOf` of the rate actually used and the fallback reason, because callers
+(§8, D11) need to tell me *which date* the number came from, not just that it's suspect.
+
+- Manual rates always win over API rates at the same `asOf` — if I type a rate, I mean it. (Parallel-market rates in Egypt can drift from the official one; I need the override.)
 - API failures must never break a write. Log, fall back, continue.
-- Manual rates always win over API rates with the same timestamp — if I type a rate, I mean it. (Parallel-market rates in Egypt can drift from the official one; I need the override.)
 - A `POST /api/fx/refresh` endpoint pulls fresh rates on demand. No cron, no background jobs — I'll click a button.
+- Inverse pairs are derived by division; `1 base = rate quote` is the stored direction.
+
+**Free-tier constraints that shape the design** (verified 2026-08-03: no key, no signup, CORS
+enabled, `result: "success"`, EGP present): once-daily updates, **no historical rates**,
+attribution required, redistribution forbidden.
+
+**Attribution is a licence condition, not a nicety (D10).** Render a small "Rates by Exchange Rate
+API" link to `https://www.exchangerate-api.com` in the footer of `/currency` and in Settings,
+shown whenever `ratesApiEnabled` is true. Not optional — it is the terms of the endpoint.
+
+Read `time_eol_unix` on every refresh and persist it to `Setting.ratesApiEolAt`. If it ever comes
+back non-zero, surface a persistent warning in Settings with the deprecation date, so I can switch
+providers before the endpoint dies rather than after.
+
+**Backdated entries must prompt, not guess (D11).** The free endpoint returns today's rates only,
+so a transaction dated in the past with no stored rate at-or-before it will resolve via fallback
+rule 2 above — correct for a *live* conversion, silently wrong for a *historical* one. In the
+transaction, debt-payment and savings-contribution forms: if the selected date is **more than 48h
+in the past** and no rate exists at-or-before it, show an inline notice naming the date the
+suggested rate is actually from, and focus the rate field so I can overwrite it. The import path
+gets the same treatment — backdated rows resolved by fallback are flagged in the dry-run diff
+rather than imported silently.
+
+Rationale, so it isn't optimised away later: backfilling several months of history at today's rate
+produces a net-worth chart that looks smooth and is entirely fiction. The manual override is the
+fix, but only if the app tells me I need it.
 
 ---
 
@@ -198,12 +331,13 @@ Base path `/api`. JSON only. All list endpoints paginated with `?page=1&pageSize
 | PATCH/DELETE | `/categories/:id` | |
 | GET | `/transactions` | filters: `from`, `to`, `type`, `accountId`, `categoryId`, `currency`, `q`, `minAmount`, `maxAmount`; sort by date desc |
 | POST/PATCH/DELETE | `/transactions[/:id]` | TRANSFER creates a linked pair atomically |
-| GET/POST | `/debts` | list includes `paidEgp`, `remainingEgp`, `progressPct` |
+| GET/POST | `/debts` | remaining in debt currency; `remainingEgp` display-only (D4) |
 | GET/PATCH/DELETE | `/debts/:id` | |
 | POST | `/debts/:id/payments` | optionally also creates a Transaction |
-| GET/POST | `/savings-goals` | includes `savedEgp`, `progressPct`, `monthlyNeeded` |
+| GET/POST | `/savings-goals` | progress in goal currency; `savedEgp` display-only (D4b) |
 | POST | `/savings-goals/:id/contributions` | |
-| GET/PUT | `/budgets?month=YYYY-MM` | includes `spentEgp`, `remainingEgp`, `usagePct` |
+| GET/PUT | `/budgets?month=YYYY-MM` | PUT is a bulk upsert of the whole month; includes `spentEgp`, `remainingEgp`, `usagePct` |
+| POST | `/budgets/copy` | `{ fromMonth, toMonth, overwrite: boolean }` |
 | GET | `/fx/rates` | latest per pair + age |
 | POST | `/fx/refresh` | pull from API provider |
 | PUT | `/fx/manual` | set a manual rate for a pair |
@@ -227,9 +361,9 @@ Two deliverables, one shared implementation.
 
 **A. Expression-capable amount inputs.** Every field where I type money accepts arithmetic. I type `1200*3+450` and on blur or Enter it resolves to `4050.00`, with a small live preview of the result underneath while I'm typing. `Esc` reverts to the raw expression.
 
-Build `lib/expression.ts` — a **shunting-yard parser, no `eval`, no `Function` constructor, no `mathjs`**. Supports `+ - * / %`, parentheses, unary minus, decimals. Returns a `Decimal`. Returns a typed error for invalid input (`UnbalancedParen`, `UnexpectedToken`, `DivideByZero`) and the input shows a quiet inline message, not a toast.
+Build `shared/src/expression.ts` — a **shunting-yard parser, no `eval`, no `Function` constructor, no `mathjs`**. Supports `+ - * / %`, parentheses, unary minus, decimals. Returns a `Decimal`. Returns a typed error for invalid input (`UnbalancedParen`, `UnexpectedToken`, `DivideByZero`) and the input shows a quiet inline message, not a toast.
 
-Implement it identically on both sides (share the file if practical) so the client can preview and the server can accept an expression string too. **Test it thoroughly** — precedence, nesting, negatives, `10/3` precision, garbage input.
+It lives in the `shared/` workspace as **one implementation** (D7), imported by both sides, so the client can preview and the server can accept an expression string too — no duplicate to drift. **Test it thoroughly** — precedence, nesting, negatives, `10/3` precision, garbage input.
 
 **B. A standalone calculator.** Reachable from anywhere via a keyboard shortcut and a persistent button in the topbar. Opens as a sheet on mobile, a popover on desktop. Full keyboard support, a running tape/history of the last ~20 calculations, click any tape entry to reuse it, and a "use this value" action that drops the result into the transaction form. Add a currency mode: convert the current result between any two of EGP/USD/EUR/GBP inline.
 
@@ -237,7 +371,16 @@ Implement it identically on both sides (share the file if practical) so the clie
 
 ## 9. Features & screens
 
-**Dashboard** (`/`) — month selector at top. Net worth in EGP with delta vs last month; income / expenses / net for the month; spending by category (donut) and daily spend (bar) for the month; the 6 most recent transactions; debts due in the next 30 days; savings goal progress bars; a compact FX strip showing today's 3 rates with their age.
+**Dashboard** (`/`) — month selector at top. Net worth in EGP with delta vs last month; income / expenses / net for the month; **"Cost of converting" for the month** (D2); spending by category (donut) and daily spend (bar) for the month; the 6 most recent transactions; debts due in the next 30 days; savings goal progress bars; a compact FX strip showing today's 3 rates with their age.
+
+Net worth at any date is computed from frozen figures only (D5):
+
+```
+netWorthEgp(at) = Σ accounts [ openingBalanceEgp + Σ amountEgp WHERE date <= at ]
+```
+
+so "delta vs last month" is a real comparison, not two snapshots of today's rate wearing different
+hats. No recomputation, no §4.4 violation.
 
 **Transactions** (`/transactions`) — filterable, searchable, paginated table on desktop; grouped-by-day card list on mobile. Row shows original amount + currency prominently with the EGP equivalent secondary. Inline quick-add row at the top of the table. Bulk select → delete / recategorise. Keyboard shortcut `n` opens the add dialog.
 
@@ -251,7 +394,7 @@ Implement it identically on both sides (share the file if practical) so the clie
 
 **Currency** (`/currency`) — a proper converter (amount + from + to, with the expression input), the current rate table with age and source per pair, manual rate override fields, and a "refresh from API" button that shows what changed.
 
-**Settings** (`/settings`) — theme preset + light/dark/system, base currency, rate source toggle, category management, account management, export JSON, import JSON, and a "reset all data" with a typed confirmation.
+**Settings** (`/settings`) — theme preset + light/dark/system, base currency (**disabled field reading "EGP — fixed in this version"**, D6), rate source toggle, API attribution link when enabled and the EOL warning if `ratesApiEolAt` is set (D10), category management, account management, export JSON, import JSON, and a "reset all data" with a typed confirmation.
 
 ---
 
@@ -262,8 +405,9 @@ I asked for modern and very attractive. That means considered, not decorated. Re
 **Concept: an instrument panel, not a dashboard template.** This is a tool I open every day to read numbers under pressure. Numbers are the hero — they get the largest type, the most contrast, and the most space. Everything else recedes. No hero cards with giant gradients, no glassmorphism, no emoji in the UI chrome.
 
 **Typography**
-- UI: a tight modern grotesque — Inter Tight or Geist. Sentence case everywhere.
-- Numerals: a mono/tabular face for every monetary figure — JetBrains Mono or Geist Mono, `font-variant-numeric: tabular-nums` on all figures so columns align and digits don't jitter when they update.
+- UI: Inter Tight, self-hosted via `@fontsource-variable/inter-tight` (D9). Sentence case everywhere.
+- Numerals: JetBrains Mono, self-hosted via `@fontsource-variable/jetbrains-mono`, with `font-variant-numeric: tabular-nums` on every monetary figure so columns align and digits don't jitter when they update.
+- No CDN font links: they would contradict the offline requirement and add a render-blocking request for no benefit.
 - Currency codes and units are set smaller and in a muted tone next to their figure — `12,480.00` big, `EGP` small. Never the same weight.
 - A real type scale. Big numbers are genuinely big (36–48px on dashboard stats), labels are genuinely small (11–12px, letter-spaced, muted).
 
@@ -304,15 +448,20 @@ Ship **6 presets**, each with a real name and a distinct temperature — not six
 
 Both settings persist to `localStorage` immediately and sync to the `Setting` row in the background. A `ThemeProvider` exposes `{ mode, setMode, preset, setPreset, resolvedMode }`. The Settings page renders presets as swatch buttons showing the actual colours, with the active one clearly marked.
 
+**Base currency is EGP-locked in v1 (D6).** The `Setting.baseCurrency` column stays for schema
+stability, the value is hard-locked to `EGP`, and Settings renders it as a disabled field labelled
+"EGP — fixed in this version" — visible so I know where it will live, honest about doing nothing.
+Do **not** rename `amountEgp` → `amountBase`; that is churn for a feature that isn't shipping.
+
 ---
 
 ## 12. Build order
 
 Do these in order. **Stop after each phase, run its acceptance checks, and report to me before starting the next one.** Commit at the end of each phase with a conventional-commit message.
 
-**Phase 0 — Foundation.** Workspaces, both apps scaffolded, TS strict on both, ESLint/Prettier, `docker-compose.yml` with Postgres 16, `.env.example`, root scripts (`dev`, `dev:client`, `dev:server`, `db:up`, `db:migrate`, `db:seed`, `db:studio`, `lint`, `test`). Generate `CLAUDE.md` capturing the conventions in this spec so future sessions don't drift. ✅ *Check:* `npm run dev` starts both; client shows a styled page proving Tailwind v4 is live; `/api/health` returns 200.
+**Phase 0 — Foundation.** Three workspaces (`client`, `server`, `shared`), both apps scaffolded, TS strict on all three, ESLint/Prettier, `docker-compose.yml` with Postgres 16, `.env.example`, root scripts (`dev`, `dev:client`, `dev:server`, `db:up`, `db:migrate`, `db:seed`, `db:studio`, `lint`, `test`) with `dev` running both through `concurrently`. Generate `CLAUDE.md` capturing the conventions in this spec so future sessions don't drift. ✅ *Check:* `npm run dev` starts both; client shows a styled page proving Tailwind v4 is live; `/api/health` returns 200.
 
-**Phase 1 — Data + money core.** Full Prisma schema, first migration, seed script, `lib/money.ts` with tests, `lib/expression.ts` with tests, env validation, error middleware, logger. ✅ *Check:* `db:migrate && db:seed` runs clean; `npm test` passes; expression tests cover precedence, nesting, unary minus, and every error case.
+**Phase 1 — Data + money core.** Full Prisma schema, first migration, seed script, `server/src/lib/money.ts` with tests, `shared/src/expression.ts` with tests, env validation, error middleware, logger. ✅ *Check:* `db:migrate && db:seed` runs clean; `npm test` passes; expression tests cover precedence, nesting, unary minus, and every error case.
 
 **Phase 2 — FX engine.** Rate providers, `getRate` with fallback + staleness, all `/api/fx/*` endpoints. ✅ *Check:* rates resolve correctly with the network disabled; staleness flag behaves; manual override wins.
 
@@ -346,5 +495,12 @@ Do these in order. **Stop after each phase, run its acceptance checks, and repor
 ## 14. Explicitly out of scope for v1
 
 Auth, multi-user, receipt OCR, bank sync / open banking, recurring transactions, notifications, PWA/offline sync, Arabic localisation (keep strings centralised so it's easy later), mobile native app, deployment beyond localhost.
+
+**Debt interest (D4).** Removed from v1. Simple interest with no accrual basis, no payment
+allocation between principal and interest and no compounding schedule is a half-feature producing
+numbers that can't be defended. These debts are person-to-person and interest-free. If it comes
+back it gets its own spec with an explicit day-count convention.
+
+**A configurable base currency (D6).** The column exists; the feature does not.
 
 Don't build these. Don't scaffold for these. Do keep the data model from actively blocking them.

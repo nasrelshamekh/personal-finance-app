@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" class="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Ledger EG</title>
+    <script>
+      // Applies theme before React mounts so there is never a flash of the wrong theme
+      // (SPEC §11). Deliberately blocking, deliberately inline, deliberately tiny.
+      (function () {
+        try {
+          var mode = localStorage.getItem('ledger.theme.mode') || 'system';
+          var preset = localStorage.getItem('ledger.theme.preset') || 'graphite';
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.classList.toggle('dark', dark);
+          root.dataset.theme = preset;
+        } catch (e) {
+          // localStorage can throw in private modes. A wrong theme beats a blank page.
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

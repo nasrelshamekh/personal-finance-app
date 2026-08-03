@@ -1,0 +1,145 @@
+# CLAUDE.md — working conventions for Ledger EG
+
+`SPEC.md` is the single source of truth for *what* to build. This file records *how* this
+repo is actually put together, so a future session doesn't drift. `DECISIONS.md` is the
+changelog of decisions D1–D11 that were folded into SPEC.md.
+
+Keep this file updated as conventions emerge.
+
+---
+
+## Shape of the repo
+
+Three npm workspaces:
+
+| Workspace | Package | Role |
+|---|---|---|
+| `shared/` | `@ledger/shared` | Leaf. Expression parser, currency, formatting, wire DTOs. |
+| `server/` | `@ledger/server` | Express 5 API, Prisma, business logic. |
+| `client/` | `@ledger/client` | Vite + React 18 SPA. |
+
+**`shared/` never imports Prisma, `client/` or `server/`.** It is consumed as TypeScript
+*source*, not a build artefact — there is no build step to forget and no stale `dist` to
+debug. Both sides resolve it through the `exports` field; the client additionally aliases
+it in `vite.config.ts` so Vite transforms it like first-party code.
+
+Because `shared/` can't see Prisma, `Currency` necessarily exists twice — once as a Prisma
+enum, once as a zod enum in `shared/src/currency.ts`. A compile-time assertion in
+`server/src/types/` keeps the member lists identical. **If you add a currency, change both.**
+
+## Commands
+
+```bash
+npm run dev          # both apps, colour-prefixed (server cyan, client magenta)
+npm run db:up        # Postgres 16 in Docker
+npm run db:migrate   # prisma migrate dev
+npm run db:seed      # prisma db seed
+npm run lint         # eslint, whole repo
+npm run typecheck    # tsc --noEmit in all three workspaces
+npm test             # vitest run in every workspace that has tests
+```
+
+Ports: API `4000`, client `5173`. The client proxies `/api` → `:4000`, so the client only
+ever calls same-origin relative URLs. `vite --host` is on by default so the app is
+reachable from a phone on the LAN.
+
+## Environment
+
+One `.env` at the repo root — copy from `.env.example`. The server loads it with node's
+`--env-file`. The Prisma CLI only looks next to the schema, so `server/prisma.config.ts`
+calls `process.loadEnvFile()` on the root file explicitly. **Don't add `dotenv`**, and
+don't create a second `.env` inside `server/`.
+
+## TypeScript
+
+Strict everywhere, plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+`noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`.
+
+- **No `any`. No `@ts-ignore`.** Both are ESLint errors, not warnings. `@ts-expect-error`
+  is allowed only with a description.
+- `exactOptionalPropertyTypes` means you cannot pass `foo: undefined` for an optional
+  property. Build the object conditionally and spread it — see `server/src/logger.ts`.
+- All three workspaces are ESM (`"type": "module"`) with `moduleResolution: "Bundler"`,
+  so relative imports are extensionless. `tsx` handles this at runtime.
+- Path alias `@/*` → `./src/*` in both `client` and `server`. On the client it is mirrored
+  in **both** `vite.config.ts` and `tsconfig.app.json` — shadcn's init needs both.
+
+## Money — the rules that matter most
+
+Read SPEC §4 in full before touching anything that holds a figure. The short version:
+
+1. **Never a JS `number`.** `Decimal @db.Decimal(18,4)` in Postgres, `decimal.js` in code.
+2. **Strings are the only interchange format.** `Prisma.Decimal` → `.toString()` the
+   instant it leaves Prisma → `decimal.js` for arithmetic → `.toFixed(4)` string into
+   JSON. A `Prisma.Decimal` must never escape the service layer, and no `Decimal` of
+   either class is ever serialised. This is why the two Decimal classes can't collide.
+3. **Amounts are stored signed** — income positive, expense negative, transfer outflow
+   negative / inflow positive. A balance is therefore a plain sum with no branching on
+   `type`. Display may show a bare magnitude; storage never does.
+4. **`amountEgp` is frozen at write time** and recomputed only when the amount, currency
+   or date is edited. Never on read.
+5. **Accounts are single-currency.** A transaction's currency must equal its account's,
+   enforced in zod *and* in the service. Cross-currency movement is a transfer, nothing else.
+6. Store 4dp, display 2dp, round half-up.
+
+## Server module pattern
+
+Every module under `server/src/modules/<name>/` is exactly three files:
+
+- `schema.ts` — zod. Re-exports the wire schemas from `@ledger/shared/dto` and extends
+  them with server-only concerns (param coercion, pagination).
+- `service.ts` — all Prisma and all business logic. **No `req`, no `res`.**
+- `router.ts` — thin. Validates, calls the service, returns. **Never touches Prisma.**
+
+Express 5 specifics:
+
+- Async handlers propagate rejections automatically. **Do not write an `asyncHandler`.**
+- `path-to-regexp` v8: bare `*` is invalid. Use `/*splat` for catch-alls, `{/:id}` for
+  optional params.
+- One central error middleware maps `AppError`, `ZodError` and Prisma's
+  `PrismaClientKnownRequestError` (P2002 → 409, P2025 → 404) to
+  `{ error: { code, message, details? } }`. No stack traces when `NODE_ENV=production`.
+
+## Client feature pattern
+
+Every folder under `client/src/features/<name>/` owns its components, its `api.ts` (typed
+fetch calls) and its `queries.ts` (TanStack Query hooks + a query-key factory).
+**Components never call `fetch` directly.**
+
+## Styling
+
+Tailwind **v4, CSS-first**. There is no `tailwind.config.js` and there must never be one.
+All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
+`@custom-variant dark`, then the token blocks, then `@theme inline` to expose them.
+
+- Theme has two independent axes: **mode** (`.dark` class on `<html>`) and **preset**
+  (`data-theme="…"`). Both are applied by the blocking inline script in `index.html`
+  *before* React mounts — that script is the only thing preventing a flash of wrong theme,
+  so don't move it into React.
+- Presets override only `--primary`, `--primary-foreground`, `--accent`, `--ring` and
+  `--chart-1..5`. Base neutrals are shared.
+- **`--money-positive` / `--money-negative` / `--money-neutral` are not theme tokens.** A
+  preset must never repaint income and expenses. Never signal by colour alone — pair every
+  figure with a sign and a direction glyph.
+- Every monetary figure uses `.font-numeric` (JetBrains Mono + `tabular-nums`) so columns
+  align and digits don't jitter on update.
+- Fonts are self-hosted via `@fontsource-variable`. **No CDN font links** — they'd break
+  the offline requirement.
+- `client/src/components/ui/` is shadcn-generated. Extend by wrapping, don't hand-edit. If
+  you genuinely must, note it here.
+
+## Testing
+
+`vitest` per workspace; `npm test` at the root fans out. Route-level tests use `supertest`
+against `createApp()` from `server/src/app.ts`, which is why app construction is separate
+from `listen()`.
+
+## House rules
+
+- No placeholder code, no `// TODO: implement`, no mock data in a shipped path. If a phase
+  is too big, split it — don't stub it.
+- Read a file's existing conventions before adding to it.
+- Ask before: adding a dependency, changing the schema after Phase 1, or deviating from
+  SPEC.md in a way the user would notice.
+- Stop at each phase boundary, run that phase's acceptance checks, report, and commit with
+  a conventional-commit message.

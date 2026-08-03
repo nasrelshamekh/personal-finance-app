@@ -1,0 +1,147 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@import '@fontsource-variable/inter-tight';
+@import '@fontsource-variable/jetbrains-mono';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Base neutrals are shared across every preset. Only --primary, --primary-foreground,
+  --accent, --ring and --chart-1..5 are repainted per preset (SPEC §11, Phase 4).
+  Money colours are deliberately NOT theme tokens — see below.
+*/
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.17 0.005 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.005 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.005 285);
+  --primary: oklch(0.45 0.02 260);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.96 0.003 285);
+  --secondary-foreground: oklch(0.24 0.006 285);
+  --muted: oklch(0.96 0.003 285);
+  --muted-foreground: oklch(0.53 0.011 285);
+  --accent: oklch(0.96 0.003 285);
+  --accent-foreground: oklch(0.24 0.006 285);
+  --destructive: oklch(0.58 0.196 27.3);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.91 0.004 286);
+  --input: oklch(0.91 0.004 286);
+  --ring: oklch(0.6 0.015 286);
+
+  --chart-1: oklch(0.61 0.13 245);
+  --chart-2: oklch(0.6 0.11 185);
+  --chart-3: oklch(0.66 0.13 145);
+  --chart-4: oklch(0.72 0.14 85);
+  --chart-5: oklch(0.63 0.16 25);
+
+  /*
+    Money semantics live outside the theme accent on purpose (SPEC §10): a preset must
+    never be able to repaint income and expenses. Never signal by colour alone — every
+    figure is paired with a sign and a direction glyph.
+  */
+  --money-positive: oklch(0.55 0.13 155);
+  --money-negative: oklch(0.55 0.17 25);
+  --money-neutral: oklch(0.53 0.011 285);
+  --money-stale: oklch(0.72 0.15 75);
+}
+
+.dark {
+  --background: oklch(0.16 0.004 285);
+  --foreground: oklch(0.96 0.002 286);
+  --card: oklch(0.2 0.005 285);
+  --card-foreground: oklch(0.96 0.002 286);
+  --popover: oklch(0.2 0.005 285);
+  --popover-foreground: oklch(0.96 0.002 286);
+  --primary: oklch(0.8 0.02 260);
+  --primary-foreground: oklch(0.2 0.006 285);
+  --secondary: oklch(0.26 0.006 286);
+  --secondary-foreground: oklch(0.96 0.002 286);
+  --muted: oklch(0.26 0.006 286);
+  --muted-foreground: oklch(0.7 0.011 286);
+  --accent: oklch(0.26 0.006 286);
+  --accent-foreground: oklch(0.96 0.002 286);
+  --destructive: oklch(0.68 0.18 25);
+  --destructive-foreground: oklch(0.16 0.004 285);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.55 0.014 286);
+
+  --chart-1: oklch(0.68 0.14 245);
+  --chart-2: oklch(0.68 0.12 185);
+  --chart-3: oklch(0.72 0.13 145);
+  --chart-4: oklch(0.78 0.14 85);
+  --chart-5: oklch(0.7 0.16 25);
+
+  --money-positive: oklch(0.72 0.15 155);
+  --money-negative: oklch(0.7 0.17 25);
+  --money-neutral: oklch(0.7 0.011 286);
+  --money-stale: oklch(0.8 0.15 75);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-money-positive: var(--money-positive);
+  --color-money-negative: var(--money-negative);
+  --color-money-neutral: var(--money-neutral);
+  --color-money-stale: var(--money-stale);
+
+  --font-sans: 'Inter Tight Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /*
+    Every monetary figure is tabular so columns align and digits don't jitter on update
+    (SPEC §10). Applied via .tabular-nums / the <Money> component, never ad hoc.
+  */
+  .font-numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'zero' 1;
+  }
+}

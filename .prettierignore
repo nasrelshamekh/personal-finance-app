@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+server/prisma/migrations
+client/src/components/ui
+package-lock.json
+
+# Prose is hand-wrapped and reviewed as diffs; leave it alone.
+*.md
