@@ -5,9 +5,9 @@ import { prisma } from './prisma';
 
 const app = createApp({ corsOrigins: env.CORS_ORIGINS });
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.API_PORT, () => {
   logger.info(
-    { port: env.PORT, corsOrigins: env.CORS_ORIGINS, nodeEnv: env.NODE_ENV },
+    { port: env.API_PORT, corsOrigins: env.CORS_ORIGINS, nodeEnv: env.NODE_ENV },
     'Ledger EG API listening',
   );
 });

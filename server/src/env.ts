@@ -18,7 +18,14 @@ const envSchema = z.object({
       'DATABASE_URL must be a postgresql:// connection string. Copy .env.example to .env at the repo root.',
     ),
 
-  PORT: z.coerce.number().int().positive().max(65535).default(4000),
+  /**
+   * Deliberately not `PORT`. That name is a convention meaning "serve the app here", and
+   * outer tooling sets it freely — a preview runner setting PORT=5173 for the whole dev
+   * command had the API try to bind the client's port. Node's `--env-file` does not
+   * override an already-set variable, so `.env` could not win it back. An API-specific
+   * name cannot be claimed by accident.
+   */
+  API_PORT: z.coerce.number().int().positive().max(65535).default(4000),
 
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

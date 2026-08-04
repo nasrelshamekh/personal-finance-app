@@ -39,6 +39,11 @@ npm run typecheck    # tsc --noEmit in all three workspaces
 npm test             # vitest run in every workspace that has tests
 ```
 
+The server's port comes from **`API_PORT`, not `PORT`**. `PORT` is a convention meaning
+"serve the app here" and outer tooling sets it freely — a preview runner setting it for the
+whole `npm run dev` had the API try to bind the client's port, and `--env-file` could not
+win it back because Node does not let an env file override an already-set variable.
+
 Ports: API `4000`, client `5173`, **Postgres `5433`**. The client proxies `/api` → `:4000`,
 so the client only ever calls same-origin relative URLs. `vite --host` is on by default so
 the app is reachable from a phone on the LAN.
