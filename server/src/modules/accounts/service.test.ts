@@ -173,6 +173,9 @@ describe('archiving', () => {
   it('hides archived accounts from the list unless asked', async () => {
     await withRollback(async (tx) => {
       await makeStandardRates(tx);
+      // Transactions first: accounts are Restrict-protected, and the developer's real
+      // rows reference them. Both come back when the transaction rolls back.
+      await tx.transaction.deleteMany({});
       await tx.account.deleteMany({});
       await makeAccount(tx, { currency: 'EGP', name: 'Active' });
       await makeAccount(tx, { currency: 'USD', name: 'Old', isArchived: true });

@@ -10,6 +10,9 @@ import { categoriesRouter } from './modules/categories/router';
 import { transactionsRouter } from './modules/transactions/router';
 import { dashboardRouter } from './modules/dashboard/router';
 import { settingsRouter } from './modules/settings/router';
+import { debtsRouter } from './modules/debts/router';
+import { savingsRouter } from './modules/savings/router';
+import { budgetsRouter } from './modules/budgets/router';
 
 const startedAt = Date.now();
 
@@ -58,7 +61,10 @@ export function createApp({ corsOrigins, requestLogging = true }: CreateAppOptio
   app.use('/api/transactions', transactionsRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/settings', settingsRouter);
-  // Debts, savings and budgets land in Phase 6; export/import in Phase 8.
+  app.use('/api/debts', debtsRouter);
+  app.use('/api/savings-goals', savingsRouter);
+  app.use('/api/budgets', budgetsRouter);
+  // Export/import and reset land in Phase 8.
 
   app.use(notFoundHandler);
   app.use(errorHandler);

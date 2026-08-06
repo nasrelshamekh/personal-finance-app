@@ -377,7 +377,10 @@ describe('transfers (D2)', () => {
       const result = await deleteTransaction(tx, group.from.id);
 
       expect(result.deletedIds).toHaveLength(2);
-      expect(await tx.transaction.count()).toBe(0);
+      // Scoped to these two accounts rather than the whole table, which holds real rows.
+      expect(await tx.transaction.count({ where: { accountId: { in: [from.id, to.id] } } })).toBe(
+        0,
+      );
       expect((await getAccount(tx, from.id)).balance).toBe('0.0000');
       expect((await getAccount(tx, to.id)).balance).toBe('0.0000');
     });
@@ -459,6 +462,9 @@ describe('transfers (D2)', () => {
 describe('listing', () => {
   async function seedFive(tx: Parameters<Parameters<typeof withRollback>[0]>[0]) {
     await makeStandardRates(tx);
+    // These tests assert on totals and page counts, so they need the table to themselves.
+    // Safe inside withRollback — the developer's own rows come back when it rolls back.
+    await tx.transaction.deleteMany({});
     const account = await makeAccount(tx, { currency: 'EGP' });
     const groceries = await makeCategory(tx, { kind: 'EXPENSE', name: 'Groceries' });
 

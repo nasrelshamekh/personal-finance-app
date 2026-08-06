@@ -375,6 +375,154 @@ Content-Type: {{contentType}}
 
 
 ### ─────────────────────────────────────────────────────────────────────────────
+### Debts
+### ─────────────────────────────────────────────────────────────────────────────
+
+# @name createDebt
+POST {{host}}/debts
+Content-Type: {{contentType}}
+
+{
+  "counterparty": "Amir",
+  "direction": "I_OWE",
+  "principal": "10000",
+  "currency": "EGP",
+  "startDate": "2026-07-01",
+  "dueDate": "2026-09-30",
+  "note": "Borrowed for the deposit"
+}
+
+@debtId = {{createDebt.response.body.id}}
+
+###
+GET {{host}}/debts
+
+###
+GET {{host}}/debts?direction=I_OWE&status=ACTIVE
+
+###
+GET {{host}}/debts/{{debtId}}
+
+###
+# A payment with no account: the debt balance moves, no account balance does.
+POST {{host}}/debts/{{debtId}}/payments
+Content-Type: {{contentType}}
+
+{ "amount": "2500", "date": "2026-08-10", "note": "First instalment", "accountId": null }
+
+###
+# A payment WITH an account also writes the matching transaction, atomically.
+# Paste an EGP account id from GET /accounts.
+POST {{host}}/debts/{{debtId}}/payments
+Content-Type: {{contentType}}
+
+{
+  "amount": "1500",
+  "date": "2026-08-12",
+  "note": "Second instalment",
+  "accountId": "{{cashAccountId}}"
+}
+
+###
+# Rejected (422): the account's currency must match the payment (D3).
+POST {{host}}/debts/{{debtId}}/payments
+Content-Type: {{contentType}}
+
+{ "amount": "50", "date": "2026-08-12", "accountId": "{{usdAccountId}}" }
+
+###
+PATCH {{host}}/debts/{{debtId}}
+Content-Type: {{contentType}}
+
+{ "status": "SETTLED" }
+
+###
+# Removing a payment also removes the transaction it created.
+# DELETE {{host}}/debts/{{debtId}}/payments/PASTE_PAYMENT_ID
+
+###
+DELETE {{host}}/debts/{{debtId}}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Savings
+### ─────────────────────────────────────────────────────────────────────────────
+
+# @name createGoal
+POST {{host}}/savings-goals
+Content-Type: {{contentType}}
+
+{
+  "name": "New laptop",
+  "targetAmount": "60000",
+  "currency": "EGP",
+  "deadline": "2026-12-31",
+  "color": "#4a6f9f",
+  "icon": "piggy-bank"
+}
+
+@goalId = {{createGoal.response.body.id}}
+
+###
+# Progress, remaining and monthlyNeeded all in the goal's own currency (D4b).
+GET {{host}}/savings-goals
+
+###
+GET {{host}}/savings-goals/{{goalId}}
+
+###
+POST {{host}}/savings-goals/{{goalId}}/contributions
+Content-Type: {{contentType}}
+
+{ "amount": "15000", "date": "2026-08-12", "accountId": null }
+
+###
+# With an account, the money actually leaves it.
+POST {{host}}/savings-goals/{{goalId}}/contributions
+Content-Type: {{contentType}}
+
+{ "amount": "5000", "date": "2026-08-13", "accountId": "{{cashAccountId}}" }
+
+###
+DELETE {{host}}/savings-goals/{{goalId}}
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Budgets
+### ─────────────────────────────────────────────────────────────────────────────
+
+# Every expense category for the month, budgeted or not.
+GET {{host}}/budgets?month=2026-08
+
+###
+# A bulk upsert of the whole month. A null limit clears that category's budget
+# rather than setting it to zero.
+PUT {{host}}/budgets
+Content-Type: {{contentType}}
+
+{
+  "month": "2026-08",
+  "budgets": [
+    { "categoryId": "{{childCategoryId}}", "limitEgp": "4000" },
+    { "categoryId": "{{parentCategoryId}}", "limitEgp": null }
+  ]
+}
+
+###
+POST {{host}}/budgets/copy
+Content-Type: {{contentType}}
+
+{ "fromMonth": "2026-08", "toMonth": "2026-09", "overwrite": false }
+
+###
+# Rejected (422): a month cannot be copied onto itself.
+POST {{host}}/budgets/copy
+Content-Type: {{contentType}}
+
+{ "fromMonth": "2026-08", "toMonth": "2026-08", "overwrite": false }
+
+
+### ─────────────────────────────────────────────────────────────────────────────
 ### Dashboard
 ### ─────────────────────────────────────────────────────────────────────────────
 

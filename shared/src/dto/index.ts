@@ -3,5 +3,8 @@ export * from './fx';
 export * from './accounts';
 export * from './categories';
 export * from './transactions';
+export * from './debts';
+export * from './savings';
+export * from './budgets';
 export * from './settings';
 export * from './dashboard';
