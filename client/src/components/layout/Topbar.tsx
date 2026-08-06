@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { NAV_ITEMS } from './navigation';
 import { ThemeModeToggle } from './ThemeModeToggle';
+import { CalculatorButton } from '@/features/calculator/CalculatorButton';
 
 /**
  * Deliberately quiet: on an instrument panel the chrome recedes so the numbers can be the
@@ -28,6 +29,7 @@ export function Topbar() {
         </h1>
 
         <div className="ml-auto flex items-center gap-1">
+          <CalculatorButton />
           <ThemeModeToggle />
         </div>
       </div>

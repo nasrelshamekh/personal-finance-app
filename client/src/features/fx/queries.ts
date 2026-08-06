@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Currency, StoredRateDto } from '@ledger/shared';
 import { fxApi } from './api';
 
+export type { Currency };
+
 /** Query-key factory, so invalidation never depends on a string literal matching. */
 export const fxKeys = {
   all: ['fx'] as const,
@@ -53,6 +55,38 @@ export function useRefreshRates() {
 
   return useMutation({
     mutationFn: fxApi.refresh,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fxKeys.all });
+    },
+  });
+}
+
+/**
+ * Converts through the API rather than multiplying client-side.
+ *
+ * The server owns rate resolution — inversion, triangulation, staleness, the lot — so
+ * asking it means the calculator can never quietly disagree with the figure a transaction
+ * was frozen at. Disabled while the amount is empty so an empty box makes no request.
+ */
+export function useConvert(amount: string, from: Currency, to: Currency) {
+  const trimmed = amount.trim();
+
+  return useQuery({
+    queryKey: [...fxKeys.all, 'convert', trimmed, from, to] as const,
+    queryFn: () => fxApi.convert(trimmed, from, to),
+    enabled: trimmed !== '',
+    // A conversion is a question about right now; don't serve a minute-old answer.
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function useSetManualRate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ base, quote, rate }: { base: Currency; quote: Currency; rate: string }) =>
+      fxApi.setManualRate(base, quote, rate),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: fxKeys.all });
     },

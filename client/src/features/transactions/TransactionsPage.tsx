@@ -133,11 +133,15 @@ export function TransactionsPage() {
       setEditing(undefined);
       setSearchParams((params) => {
         params.delete('new');
+        params.delete('amount');
         return params;
       });
     },
     [setSearchParams],
   );
+
+  /** Set by the calculator's "use this value" (SPEC §8B). */
+  const initialAmount = searchParams.get('amount') ?? undefined;
 
   // `n` opens the add sheet (SPEC §9) — but not while you are typing in a field.
   useEffect(() => {
@@ -438,7 +442,12 @@ export function TransactionsPage() {
         </>
       )}
 
-      <TransactionSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
+      <TransactionSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        editing={editing}
+        initialAmount={initialAmount}
+      />
     </>
   );
 }

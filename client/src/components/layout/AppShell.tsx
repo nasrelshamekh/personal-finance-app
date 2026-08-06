@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { FxStrip } from '@/features/fx/FxStrip';
+import { CalculatorProvider } from '@/features/calculator/CalculatorProvider';
 import { MobileNav } from './MobileNav';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -40,23 +41,26 @@ export function AppShell() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-svh bg-background">
-        <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
+      {/* Inside the router, so "use this value" can navigate to the transaction form. */}
+      <CalculatorProvider>
+        <div className="flex min-h-svh bg-background">
+          <Sidebar collapsed={collapsed} onToggle={toggleSidebar} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar />
-          <FxStrip />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar />
+            <FxStrip />
 
-          <main
-            id="main"
-            className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-24 pt-6 sm:px-6 md:pb-10"
-          >
-            <Outlet />
-          </main>
+            <main
+              id="main"
+              className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-24 pt-6 sm:px-6 md:pb-10"
+            >
+              <Outlet />
+            </main>
+          </div>
+
+          <MobileNav />
         </div>
-
-        <MobileNav />
-      </div>
+      </CalculatorProvider>
     </TooltipProvider>
   );
 }

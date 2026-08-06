@@ -158,6 +158,16 @@ A file that exports a component must export *only* components, or Fast Refresh s
 working for it — that is why `theme-context.ts` and `hooks/useTheme.ts` sit beside
 `ThemeProvider.tsx` rather than inside it.
 
+**Don't name a context member `useSomething`.** `rules-of-hooks` decides what a hook is
+from the name alone, so `const { useValue } = useCalculator()` makes every call site an
+illegal hook call — even inside an `onClick`. The calculator's is `sendToTransaction`.
+
+The calculator (`features/calculator/`) has **no arithmetic of its own**: it calls
+`evaluateExpression` from `@ledger/shared`, the same parser behind `MoneyInput` and the
+server, so `10/3` cannot mean three different things in three places. Its keypad is
+`tabIndex={-1}` — every key is typable, and putting twenty buttons in the tab order would
+bury the two controls that matter.
+
 ## Styling
 
 Tailwind **v4, CSS-first**. There is no `tailwind.config.js` and there must never be one.
@@ -194,6 +204,12 @@ All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
   - `dropdown-menu.tsx`: the generated `checked={checked}` passes an explicit `undefined`,
     which `exactOptionalPropertyTypes` rejects. Changed to a conditional spread. Re-apply
     after any `shadcn add --overwrite` of that component.
+  - `input.tsx`, `sheet.tsx` (`SheetOverlay`): **shadcn now generates for React 19**, where
+    `ref` is an ordinary prop. This app is on React 18, so a plain function component
+    silently drops any `ref` it is handed — you get a console warning and a `ref.current`
+    that stays `null`, which is a dead `.focus()` rather than a crash. Both are wrapped in
+    `forwardRef`. Check for this on **every** component you add: if anything ever passes it
+    a `ref` — your code, or Radix's `Presence` measuring an exit animation — it needs one.
 
 ## FX
 
@@ -238,6 +254,13 @@ from `listen()`.
 and a fake repository would test a reimplementation of the rule rather than the one that
 runs. DB-backed tests use `withRollback()` from `server/src/test/db.ts` so they never
 touch real data.
+
+**Never write a test that assumes an empty table.** The developer's database holds real
+data, and it is the same database the tests run against. Scope each assertion to the rows
+the test made, or clear the table inside `withRollback` — and when you clear, clear what
+references it first: `clearCategories()` deletes transactions before categories because
+`Transaction.categoryId` is `onDelete: Restrict`, so one real categorised row is enough to
+block the wipe.
 
 `fileParallelism` is **off** in `server/vitest.config.ts`. Test files share one database,
 and a rolled-back transaction isolates a test from its own file but not from another file

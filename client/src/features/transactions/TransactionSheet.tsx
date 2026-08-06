@@ -49,6 +49,8 @@ interface TransactionSheetProps {
   onOpenChange: (open: boolean) => void;
   /** Present when editing; absent when adding. */
   editing?: TransactionDto | undefined;
+  /** Prefills the amount — how the calculator hands a result over (SPEC §8B). */
+  initialAmount?: string | undefined;
 }
 
 /**
@@ -58,7 +60,12 @@ interface TransactionSheetProps {
  * the date defaults to today and the account to the first one you have, so a typical
  * entry is amount → category → save.
  */
-export function TransactionSheet({ open, onOpenChange, editing }: TransactionSheetProps) {
+export function TransactionSheet({
+  open,
+  onOpenChange,
+  editing,
+  initialAmount,
+}: TransactionSheetProps) {
   const isDesktop = useIsDesktop();
   const { data: accounts = [] } = useAccounts();
   const create = useCreateTransaction();
@@ -111,14 +118,14 @@ export function TransactionSheet({ open, onOpenChange, editing }: TransactionShe
     }
 
     setMode('EXPENSE');
-    setAmount('');
+    setAmount(initialAmount ?? '');
     setToAmount('');
     setCategoryId('');
     setDate(todayIso());
     setNote('');
     setAccountId(accounts[0]?.id ?? '');
     setToAccountId(accounts[1]?.id ?? '');
-  }, [open, editing, accounts]);
+  }, [open, editing, accounts, initialAmount]);
 
   const backdated = useMemo(() => isBackdated(date), [date]);
   const isPending = create.isPending || update.isPending;
