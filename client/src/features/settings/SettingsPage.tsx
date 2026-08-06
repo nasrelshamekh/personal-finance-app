@@ -1,10 +1,15 @@
-import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, Monitor, Moon, Sun, Wallet } from 'lucide-react';
 import { THEME_MODES, type ThemeMode, type ThemePreset } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { useTheme } from '@/hooks/useTheme';
 import { PRESETS } from '@/providers/theme-context';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { RateAttribution } from '@/features/fx/RateAttribution';
+import { Label } from '@/components/ui/label';
+import { CategoryManager } from '@/features/categories/CategoryManager';
+import { DataSection } from './DataSection';
+import { RatesSection } from './RatesSection';
+import { useUpdateSettings } from './queries';
 
 const MODE_META: Record<ThemeMode, { label: string; icon: typeof Sun; hint: string }> = {
   light: { label: 'Light', icon: Sun, hint: 'Always light' },
@@ -68,6 +73,23 @@ function PresetSwatch({
 
 export function SettingsPage() {
   const { mode, setMode, preset, setPreset, resolvedMode } = useTheme();
+  const updateSettings = useUpdateSettings();
+
+  /**
+   * The theme applies from localStorage and syncs to the Setting row afterwards (SPEC
+   * §11). Deliberately fire-and-forget: the choice has already taken effect locally, and a
+   * failed round trip is not worth interrupting anyone over — it will be sent again the
+   * next time either control is touched.
+   */
+  function chooseMode(next: ThemeMode) {
+    setMode(next);
+    updateSettings.mutate({ themeMode: next });
+  }
+
+  function choosePreset(next: ThemePreset) {
+    setPreset(next);
+    updateSettings.mutate({ themePreset: next });
+  }
 
   return (
     <>
@@ -96,7 +118,7 @@ export function SettingsPage() {
                     <button
                       key={option}
                       type="button"
-                      onClick={() => setMode(option)}
+                      onClick={() => chooseMode(option)}
                       aria-pressed={isActive}
                       title={hint}
                       className={cn(
@@ -134,11 +156,62 @@ export function SettingsPage() {
                     description={meta.description}
                     isActive={preset === meta.id}
                     isDark={resolvedMode === 'dark'}
-                    onSelect={() => setPreset(meta.id)}
+                    onSelect={() => choosePreset(meta.id)}
                   />
                 ))}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="categories-heading">
+          <h3
+            id="categories-heading"
+            className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+          >
+            Categories
+          </h3>
+          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+            One level of nesting: Groceries can sit under Food, but nothing sits under Groceries. A
+            category with history is archived rather than deleted, so past months keep reading the
+            way they did.
+          </p>
+          <div className="mt-4">
+            <CategoryManager />
+          </div>
+        </section>
+
+        <section aria-labelledby="accounts-heading">
+          <h3
+            id="accounts-heading"
+            className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+          >
+            Accounts
+          </h3>
+          <div className="mt-4 rounded-lg border border-border p-4">
+            <p className="max-w-prose text-xs text-muted-foreground">
+              Accounts are managed on their own screen, where their balances are visible — which is
+              the context you need to decide anything about them.
+            </p>
+            <Link
+              to="/accounts"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Wallet className="size-3.5" aria-hidden />
+              Manage accounts
+            </Link>
+          </div>
+        </section>
+
+        <section aria-labelledby="rates-heading">
+          <h3
+            id="rates-heading"
+            className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+          >
+            Exchange rates
+          </h3>
+          <div className="mt-4">
+            <RatesSection />
           </div>
         </section>
 
@@ -149,25 +222,25 @@ export function SettingsPage() {
           >
             Data
           </h3>
-          <div className="mt-4 rounded-lg border border-border p-4">
-            <p className="text-sm text-foreground">Base currency</p>
-            <div className="mt-2 flex items-center gap-2">
+
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-border p-4">
+              <Label htmlFor="base-currency">Base currency</Label>
               <input
+                id="base-currency"
                 value="EGP — fixed in this version"
                 disabled
                 readOnly
-                aria-label="Base currency"
-                className="w-full max-w-xs rounded-md border border-input bg-muted px-3 py-1.5 text-sm text-muted-foreground"
+                className="mt-2 w-full max-w-xs rounded-md border border-input bg-muted px-3 py-1.5 text-sm text-muted-foreground"
               />
+              <p className="mt-2 max-w-prose text-xs text-muted-foreground">
+                Every stored figure is denominated in Egyptian pounds. The setting is here so you
+                know where it will live, and does nothing until it genuinely works.
+              </p>
             </div>
-            <p className="mt-2 max-w-prose text-xs text-muted-foreground">
-              Every stored figure is denominated in Egyptian pounds. The setting is here so you know
-              where it will live, and does nothing until it genuinely works.
-            </p>
-          </div>
 
-          {/* Licence condition of the free rates endpoint (D10). */}
-          <RateAttribution />
+            <DataSection />
+          </div>
         </section>
       </div>
     </>

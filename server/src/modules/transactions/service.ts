@@ -4,6 +4,7 @@ import {
   BASE_CURRENCY,
   Decimal,
   TX_SIGN,
+  UNCATEGORISED,
   isRateApproximate,
   type Currency,
   type CreateTransactionInput,
@@ -125,7 +126,8 @@ function buildWhere(query: ListTransactionsQuery): Prisma.TransactionWhereInput 
   if (query.to !== undefined) and.push({ date: { lte: query.to } });
   if (query.type !== undefined) and.push({ type: query.type });
   if (query.accountId !== undefined) and.push({ accountId: query.accountId });
-  if (query.categoryId !== undefined) and.push({ categoryId: query.categoryId });
+  if (query.categoryId === UNCATEGORISED) and.push({ categoryId: null });
+  else if (query.categoryId !== undefined) and.push({ categoryId: query.categoryId });
   if (query.currency !== undefined) and.push({ currency: query.currency });
   if (query.q !== undefined) and.push({ note: { contains: query.q, mode: 'insensitive' } });
 

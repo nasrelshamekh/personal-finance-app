@@ -13,6 +13,7 @@ import { settingsRouter } from './modules/settings/router';
 import { debtsRouter } from './modules/debts/router';
 import { savingsRouter } from './modules/savings/router';
 import { budgetsRouter } from './modules/budgets/router';
+import { backupRouter } from './modules/backup/router';
 
 const startedAt = Date.now();
 
@@ -64,7 +65,9 @@ export function createApp({ corsOrigins, requestLogging = true }: CreateAppOptio
   app.use('/api/debts', debtsRouter);
   app.use('/api/savings-goals', savingsRouter);
   app.use('/api/budgets', budgetsRouter);
-  // Export/import and reset land in Phase 8.
+  // Mounted at the root of /api because SPEC §7 puts export, import and reset there
+  // rather than under a resource of their own — they act on the whole database.
+  app.use('/api', backupRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -563,3 +563,89 @@ GET {{host}}/accounts/00000000-0000-0000-0000-000000000000
 ###
 # 400 — not a uuid.
 GET {{host}}/accounts/not-a-uuid
+
+
+### ─────────────────────────────────────────────────────────────────────────────
+### Backup — export, restore, erase (SPEC §7, §9)
+### ─────────────────────────────────────────────────────────────────────────────
+
+# The full dump. Served as an attachment, so a REST client saves it rather than
+# printing 14 kB of JSON at you. Money is stringified, dates are ISO, ids are kept.
+# @name backup
+GET {{host}}/export
+
+###
+# A dry run writes NOTHING and returns the same report an apply would. Paste a real
+# dump in as `backup` — this one is deliberately minimal and will come back with
+# problems listed rather than a 500, which is the point of the dry run.
+POST {{host}}/import
+Content-Type: application/json
+
+{
+  "dryRun": true,
+  "backup": {
+    "format": "ledger-eg.backup",
+    "version": 1,
+    "exportedAt": "2026-08-06T00:00:00.000Z",
+    "data": {
+      "accounts": [],
+      "categories": [],
+      "debts": [],
+      "debtPayments": [],
+      "savingsGoals": [],
+      "savingsContributions": [],
+      "transactions": [],
+      "budgets": [],
+      "exchangeRates": [],
+      "settings": {
+        "baseCurrency": "EGP",
+        "locale": "en-US",
+        "rateSource": "API",
+        "ratesApiEnabled": true,
+        "ratesApiEolAt": null,
+        "themePreset": "graphite",
+        "themeMode": "system"
+      }
+    }
+  }
+}
+
+###
+# 422 — a backup written by a newer version of the app is refused rather than
+# half-understood.
+POST {{host}}/import
+Content-Type: application/json
+
+{
+  "dryRun": true,
+  "backup": {
+    "format": "ledger-eg.backup",
+    "version": 99,
+    "exportedAt": "2026-08-06T00:00:00.000Z",
+    "data": {
+      "accounts": [], "categories": [], "debts": [], "debtPayments": [],
+      "savingsGoals": [], "savingsContributions": [], "transactions": [],
+      "budgets": [], "exchangeRates": [],
+      "settings": {
+        "baseCurrency": "EGP", "locale": "en-US", "rateSource": "API",
+        "ratesApiEnabled": true, "ratesApiEolAt": null,
+        "themePreset": "graphite", "themeMode": "system"
+      }
+    }
+  }
+}
+
+###
+# 400 — the confirmation is compared exactly, case included. This is the safe one to run.
+POST {{host}}/reset
+Content-Type: application/json
+
+{ "confirmation": "erase everything" }
+
+###
+# ⚠️  THIS ERASES EVERY ROW. It is left here because the API has it, not because you
+# should run it. Export first.
+# POST {{host}}/reset
+# Content-Type: application/json
+#
+# { "confirmation": "ERASE EVERYTHING", "restoreStarterData": true }

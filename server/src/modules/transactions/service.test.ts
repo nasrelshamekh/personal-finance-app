@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TransactionDto, TransferGroupDto } from '@ledger/shared';
+import { UNCATEGORISED, type TransactionDto, type TransferGroupDto } from '@ledger/shared';
 import { withRollback } from '../../test/db';
 import { makeAccount, makeCategory, makeStandardRates, TEST_NOW } from '../../test/factories';
 import { getAccount } from '../accounts/service';
@@ -501,6 +501,40 @@ describe('listing', () => {
 
       expect(found.data).toHaveLength(1);
       expect(found.data[0]?.note).toContain('Gianaclis');
+    });
+  });
+
+  it('filters to rows with no category at all', async () => {
+    await withRollback(async (tx) => {
+      await tx.transaction.deleteMany({});
+      const account = await makeAccount(tx, { currency: 'EGP' });
+      const category = await makeCategory(tx, { kind: 'EXPENSE' });
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '100',
+        accountId: account.id,
+        categoryId: category.id,
+        date: DATE,
+        note: null,
+      });
+      const bare = asEntry(
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '200',
+          accountId: account.id,
+          categoryId: null,
+          date: DATE,
+          note: null,
+        }),
+      );
+
+      // The dashboard links into this bucket, so it has to be reachable as a filter.
+      const found = await listTransactions(tx, { ...listDefaults, categoryId: UNCATEGORISED });
+
+      expect(found.data).toHaveLength(1);
+      expect(found.data[0]?.id).toBe(bare.id);
+      expect(found.data[0]?.categoryId).toBeNull();
     });
   });
 

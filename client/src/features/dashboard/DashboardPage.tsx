@@ -197,7 +197,7 @@ export function DashboardPage() {
               ) : (
                 <div className="mt-3 grid items-center gap-4 sm:grid-cols-[180px_1fr]">
                   <CategoryDonut data={data.spendByCategory} />
-                  <CategoryLegend data={data.spendByCategory} />
+                  <CategoryLegend data={data.spendByCategory} month={month} />
                 </div>
               )}
             </article>

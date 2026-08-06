@@ -2,7 +2,9 @@
 
 `SPEC.md` is the single source of truth for *what* to build. This file records *how* this
 repo is actually put together, so a future session doesn't drift. `DECISIONS.md` is the
-changelog of decisions D1–D11 that were folded into SPEC.md.
+changelog of decisions D1–D12 that were folded into SPEC.md. `README.md` is the setup and
+orientation doc for a human; `SELF-CRITIQUE.md` is Phase 8's list of what was weakest and
+what was done about it.
 
 Keep this file updated as conventions emerge.
 
@@ -158,6 +160,27 @@ A file that exports a component must export *only* components, or Fast Refresh s
 working for it — that is why `theme-context.ts` and `hooks/useTheme.ts` sit beside
 `ThemeProvider.tsx` rather than inside it.
 
+**A filter lives in the URL, not in `useState`.** `TransactionsPage` derives its filters
+from `useSearchParams` and writes them back with `replace: true`. It used to hold them in
+state, which meant every `?accountId=…` link — the account cards, the dashboard categories
+— navigated and then showed everything, looking exactly like a filter that had silently
+failed. Anything filterable that something else links to must read the URL.
+
+`categoryId=none` (the `UNCATEGORISED` constant in `shared/src/dto/transactions.ts`) means
+"rows with no category". Uncategorised is a real bucket and usually the biggest one early
+on, so it has to be filterable; a sentinel rather than an empty value, because an empty
+query parameter is indistinguishable from not filtering.
+
+Every route carries its **own** `errorElement` (`PageError`), not just the layout route.
+React Router walks up to the nearest boundary, so a single one on the shell would let a
+broken screen take the sidebar with it — leaving no way to navigate off the screen that
+just failed. `RouteError` is the whole-app fallback and is reached only when the shell
+itself throws.
+
+`RouteAnnouncer` sets `document.title` and announces the destination into a live region.
+A client-side navigation fires no page load, so without it a screen reader is given nothing
+to say when you activate a nav link.
+
 **Don't name a context member `useSomething`.** `rules-of-hooks` decides what a hook is
 from the name alone, so `const { useValue } = useCalculator()` makes every call site an
 illegal hook call — even inside an `onClick`. The calculator's is `sendToTransaction`.
@@ -243,6 +266,28 @@ stale on the date in question.
 
 `ageMs` is negative when a backdated lookup fell back to a newer rate
 (`NO_RATE_AT_OR_BEFORE_DATE`). Show `asOf` in that case, not a "time ago".
+
+## Backup, restore, reset
+
+`server/src/modules/backup/` owns `GET /api/export`, `POST /api/import` and
+`POST /api/reset`. Mounted at `/api` rather than under a resource, because they act on the
+whole database.
+
+- **Ids are preserved and frozen figures are restored verbatim.** `amountEgp`, `rateToEgp`
+  and `rateAsOf` are written back exactly as exported, never recomputed — re-freezing on
+  import would restate last year's history at today's rate, the one thing SPEC §4.4 exists
+  to prevent. It also means an import never depends on the network.
+- **An import replaces, it does not merge**, and runs in one transaction. Merging by id
+  would make "restore" mean something different depending on what was already there.
+- **`findProblems()` runs before anything is written**, and a dry run returns the same
+  report an apply would. Postgres would catch most referential breakage anyway, but as one
+  opaque constraint name *after* the wipe inside the transaction — a dry run is only worth
+  having if it can name the offending row.
+- `baseCurrency` is deliberately never restored: it is locked to EGP (D6), and a backup
+  from a future version must not unlock it through the back door.
+- The starter data lives in `server/src/lib/seed-data.ts` because both `prisma/seed.ts` and
+  the reset service write it. Reset offers to restore it, on by default — a ledger with no
+  categories cannot record an expense, so a bare wipe leaves the app unusable, not fresh.
 
 ## Testing
 

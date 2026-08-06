@@ -1,5 +1,5 @@
 import { SlidersHorizontal, X } from 'lucide-react';
-import { CURRENCIES, type Currency } from '@ledger/shared';
+import { CURRENCIES, UNCATEGORISED, type Currency } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -131,6 +131,9 @@ export function TransactionFilters({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ANY}>Any category</SelectItem>
+                {/* The bucket the dashboard links into, so an arriving filter is
+                    representable here rather than showing as "Any category". */}
+                <SelectItem value={UNCATEGORISED}>Uncategorised</SelectItem>
                 {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.depth > 0 ? `↳ ${category.name}` : category.name}

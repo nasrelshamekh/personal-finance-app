@@ -135,12 +135,22 @@ export const updateTransactionSchema = z
 
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
 
+/** The `categoryId` filter value meaning "rows with no category". */
+export const UNCATEGORISED = 'none';
+
 export const listTransactionsQuerySchema = paginationQuerySchema.extend({
   from: isoDate.optional(),
   to: isoDate.optional(),
   type: txTypeSchema.optional(),
   accountId: z.string().uuid().optional(),
-  categoryId: z.string().uuid().optional(),
+  /**
+   * A uuid, or the literal `none` for rows with no category at all.
+   *
+   * "Uncategorised" is a real bucket — usually the largest one on a fresh ledger — so it
+   * has to be reachable as a filter. A sentinel rather than an empty string, because an
+   * empty query value is indistinguishable from "not filtering".
+   */
+  categoryId: z.union([z.string().uuid(), z.literal(UNCATEGORISED)]).optional(),
   currency: currencySchema.optional(),
   /** Case-insensitive substring of the note. Deliberately note-only. */
   q: z.string().min(1).max(200).optional(),

@@ -8,3 +8,4 @@ export * from './savings';
 export * from './budgets';
 export * from './settings';
 export * from './dashboard';
+export * from './backup';

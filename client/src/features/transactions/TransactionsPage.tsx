@@ -106,9 +106,65 @@ function AmountCell({ transaction }: { transaction: TransactionDto }) {
   );
 }
 
+/**
+ * The filters a link may arrive carrying. Anything else in the URL — `new`, `amount` —
+ * belongs to the add sheet and is left alone.
+ */
+const URL_FILTER_KEYS = [
+  'from',
+  'to',
+  'type',
+  'accountId',
+  'categoryId',
+  'currency',
+  'q',
+  'minAmount',
+  'maxAmount',
+] as const;
+
+function filtersFromUrl(params: URLSearchParams): Filters {
+  const filters: Filters = { page: Number(params.get('page') ?? 1) || 1, pageSize: PAGE_SIZE };
+
+  for (const key of URL_FILTER_KEYS) {
+    const value = params.get(key);
+    if (value !== null && value !== '') filters[key] = value;
+  }
+  return filters;
+}
+
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState<Filters>({ page: 1, pageSize: PAGE_SIZE });
+
+  /**
+   * The URL is the filter state, not a copy of it.
+   *
+   * It used to be `useState`, which meant `/transactions?accountId=…` — the link on every
+   * account card and every dashboard category — navigated here and then showed everything,
+   * looking exactly like a filter that had silently failed.
+   */
+  const filters = useMemo(() => filtersFromUrl(searchParams), [searchParams]);
+
+  const setFilters = useCallback(
+    (next: Filters) => {
+      setSearchParams(
+        (params) => {
+          for (const key of URL_FILTER_KEYS) {
+            const value = next[key];
+            if (value === undefined || value === '') params.delete(key);
+            else params.set(key, String(value));
+          }
+
+          if (next.page !== undefined && next.page > 1) params.set('page', String(next.page));
+          else params.delete('page');
+
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<TransactionDto | undefined>(undefined);
@@ -419,9 +475,7 @@ export function TransactionsPage() {
                 <button
                   type="button"
                   disabled={meta.page <= 1}
-                  onClick={() =>
-                    setFilters((current) => ({ ...current, page: (current.page ?? 1) - 1 }))
-                  }
+                  onClick={() => setFilters({ ...filters, page: (filters.page ?? 1) - 1 })}
                   className="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Previous
@@ -429,9 +483,7 @@ export function TransactionsPage() {
                 <button
                   type="button"
                   disabled={meta.page >= meta.totalPages}
-                  onClick={() =>
-                    setFilters((current) => ({ ...current, page: (current.page ?? 1) + 1 }))
-                  }
+                  onClick={() => setFilters({ ...filters, page: (filters.page ?? 1) + 1 })}
                   className="rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Next
