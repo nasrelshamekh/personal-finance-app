@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Minus, Plus } from 'lucide-react';
-import type { TransactionDto } from '@ledger/shared';
+import type { AccountDto, TransactionDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { ApiError } from '@/lib/api';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
@@ -32,6 +32,17 @@ const MODE_META: Record<Mode, { label: string; icon: typeof Plus }> = {
   INCOME: { label: 'Income', icon: Plus },
   TRANSFER: { label: 'Transfer', icon: ArrowLeftRight },
 };
+
+/**
+ * One shared empty array, not a `= []` default.
+ *
+ * `accounts` is in the reset effect's dependency list, and a fresh `[]` on every render
+ * makes that list change on every render — so the effect re-runs, `setFieldErrors({})`
+ * stores a new object, and that re-render produces another new `[]`. The sheet spins until
+ * the query resolves. It always did resolve, in milliseconds, which is why this went
+ * unnoticed until a test held the query open.
+ */
+const NO_ACCOUNTS: readonly AccountDto[] = [];
 
 function todayIso(): string {
   const now = new Date();
@@ -67,7 +78,7 @@ export function TransactionSheet({
   initialAmount,
 }: TransactionSheetProps) {
   const isDesktop = useIsDesktop();
-  const { data: accounts = [] } = useAccounts();
+  const { data: accounts = NO_ACCOUNTS } = useAccounts();
   const create = useCreateTransaction();
   const update = useUpdateTransaction();
 

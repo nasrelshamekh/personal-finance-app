@@ -45,3 +45,19 @@ Object.defineProperty(window, 'ResizeObserver', {
   writable: true,
   value: ResizeObserverStub,
 });
+
+/**
+ * Radix's Select drives its listbox with pointer capture and scrolls the active option
+ * into view. jsdom implements none of these — without them, opening a `<Select>` throws
+ * `target.hasPointerCapture is not a function` before the options ever render.
+ */
+Object.defineProperty(Element.prototype, 'hasPointerCapture', {
+  writable: true,
+  value: () => false,
+});
+Object.defineProperty(Element.prototype, 'setPointerCapture', { writable: true, value: () => {} });
+Object.defineProperty(Element.prototype, 'releasePointerCapture', {
+  writable: true,
+  value: () => {},
+});
+Object.defineProperty(Element.prototype, 'scrollIntoView', { writable: true, value: () => {} });
