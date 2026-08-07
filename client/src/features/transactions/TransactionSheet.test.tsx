@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AccountDto, CategoryDto, TransactionDto } from '@ledger/shared';
 import { stubApi, type ApiStub } from '@/test/http';
+import { account, category } from '@/test/fixtures';
 import { TransactionSheet } from './TransactionSheet';
 
 /**
@@ -21,38 +22,6 @@ import { TransactionSheet } from './TransactionSheet';
  * with a fresh `[]` on every render the effect re-triggers itself and the whole file hangs
  * rather than failing.
  */
-
-function account(overrides: Partial<AccountDto> & { id: string; name: string }): AccountDto {
-  return {
-    type: 'CASH',
-    currency: 'EGP',
-    openingBalance: '0.0000',
-    openingDate: '2026-08-01T00:00:00.000Z',
-    openingRateToEgp: '1.00000000',
-    openingBalanceEgp: '0.0000',
-    color: '#2f8f5b',
-    icon: 'wallet',
-    isArchived: false,
-    createdAt: '2026-08-01T00:00:00.000Z',
-    balance: '0.0000',
-    balanceEgp: '0.0000',
-    transactionCount: 0,
-    ...overrides,
-  };
-}
-
-function category(overrides: Partial<CategoryDto> & { id: string; name: string }): CategoryDto {
-  return {
-    kind: 'EXPENSE',
-    color: '#b4553f',
-    icon: 'tag',
-    parentId: null,
-    isArchived: false,
-    children: [],
-    transactionCount: 0,
-    ...overrides,
-  };
-}
 
 const CASH = account({ id: 'acc-egp', name: 'Cash (EGP)', currency: 'EGP' });
 const BANK = account({ id: 'acc-usd', name: 'Bank (USD)', currency: 'USD' });
