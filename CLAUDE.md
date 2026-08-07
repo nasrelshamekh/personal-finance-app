@@ -366,6 +366,18 @@ Prefer driving a controlled component through a real parent (see `MoneyInput.tes
 so pushing to it inside a component test has to be wrapped in `act` for the re-render to
 flush.
 
+**Use `user-event`, not `fireEvent`, for anything keyboard-shaped.** `fireEvent` dispatches
+the event and stops; `user-event` also models what the browser does *in response* — Enter
+and Space activating a focused `<button>`, Tab honouring `tabIndex={-1}`, typing moving a
+caret. `CalculatorPad.test.tsx` exists because of exactly that gap: the browser harness
+dispatches real key events but not the browser's default behaviour, so Enter on a focused
+button produced no click there and SPEC §12 Phase 7's acceptance check — *keyboard-only
+operation of the calculator works fully* — could not be closed from the browser alone.
+
+The calculator test needs a router (`sendToTransaction` navigates) and a `QueryClient`
+(the pad's currency mode calls `useConvert`), and it clears `localStorage` around every
+case because the tape persists there.
+
 ## House rules
 
 - No placeholder code, no `// TODO: implement`, no mock data in a shipped path. If a phase
