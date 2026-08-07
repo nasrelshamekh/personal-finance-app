@@ -4,6 +4,10 @@ import type {
   BudgetRowDto,
   CategoryDto,
   DashboardDto,
+  DebtDto,
+  DebtPaymentDto,
+  SavingsContributionDto,
+  SavingsGoalDto,
   TransactionDto,
 } from '@ledger/shared';
 
@@ -99,6 +103,86 @@ export function dashboard(overrides: Partial<DashboardDto> = {}): DashboardDto {
     savingsGoals: [],
     rates: [],
     autoRefresh: 'FRESH',
+    ...overrides,
+  };
+}
+
+export function debtPayment(overrides: Partial<DebtPaymentDto> & { id: string }): DebtPaymentDto {
+  return {
+    amount: '500.0000',
+    currency: 'EGP',
+    rateToDebtCurrency: '1.00000000',
+    amountInDebtCurrency: '500.0000',
+    rateToEgp: '1.00000000',
+    amountEgp: '500.0000',
+    rateAsOf: '2026-08-06T00:00:00.000Z',
+    rateIsApproximate: false,
+    date: '2026-08-06T00:00:00.000Z',
+    note: null,
+    transactionId: null,
+    ...overrides,
+  };
+}
+
+export function debt(overrides: Partial<DebtDto> & { id: string; counterparty: string }): DebtDto {
+  return {
+    direction: 'I_OWE',
+    principal: '5000.0000',
+    currency: 'EGP',
+    startDate: '2026-08-01T00:00:00.000Z',
+    dueDate: null,
+    status: 'ACTIVE',
+    note: null,
+    paid: '0.0000',
+    remaining: '5000.0000',
+    progressPct: '0.0000',
+    remainingEgp: '5000.0000',
+    remainingEgpStale: false,
+    daysUntilDue: null,
+    isOverdue: false,
+    payments: [],
+    createdAt: '2026-08-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function contribution(
+  overrides: Partial<SavingsContributionDto> & { id: string },
+): SavingsContributionDto {
+  return {
+    amount: '1000.0000',
+    currency: 'EGP',
+    rateToGoalCurrency: '1.00000000',
+    amountInGoalCurrency: '1000.0000',
+    rateToEgp: '1.00000000',
+    amountEgp: '1000.0000',
+    rateAsOf: '2026-08-06T00:00:00.000Z',
+    rateIsApproximate: false,
+    date: '2026-08-06T00:00:00.000Z',
+    transactionId: null,
+    ...overrides,
+  };
+}
+
+export function savingsGoal(
+  overrides: Partial<SavingsGoalDto> & { id: string; name: string },
+): SavingsGoalDto {
+  return {
+    targetAmount: '60000.0000',
+    currency: 'EGP',
+    deadline: null,
+    color: '#2f8f5b',
+    icon: 'piggy-bank',
+    isArchived: false,
+    saved: '0.0000',
+    remaining: '60000.0000',
+    progressPct: '0.0000',
+    savedEgp: '0.0000',
+    isComplete: false,
+    monthlyNeeded: null,
+    monthsRemaining: null,
+    contributions: [],
+    createdAt: '2026-08-01T00:00:00.000Z',
     ...overrides,
   };
 }

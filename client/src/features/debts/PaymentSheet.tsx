@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { MoneyInput } from '@/components/shared/MoneyInput';
 import { Money } from '@/components/shared/Money';
-import { useAccounts } from '@/features/accounts/queries';
+import { useAccountList } from '@/features/accounts/queries';
 import { useAddDebtPayment } from './queries';
 
 const NO_ACCOUNT = 'none';
@@ -46,7 +46,7 @@ interface PaymentSheetProps {
  */
 export function PaymentSheet({ debt, open, onOpenChange }: PaymentSheetProps) {
   const isDesktop = useIsDesktop();
-  const { data: accounts = [] } = useAccounts();
+  const accounts = useAccountList();
   const addPayment = useAddDebtPayment();
 
   const [amount, setAmount] = useState('');

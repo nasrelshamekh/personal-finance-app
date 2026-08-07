@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { MoneyInput } from '@/components/shared/MoneyInput';
 import { Money } from '@/components/shared/Money';
-import { useAccounts } from '@/features/accounts/queries';
+import { useAccountList } from '@/features/accounts/queries';
 import { useAddContribution } from './queries';
 
 const NO_ACCOUNT = 'none';
@@ -39,7 +39,7 @@ interface ContributionSheetProps {
 
 export function ContributionSheet({ goal, open, onOpenChange }: ContributionSheetProps) {
   const isDesktop = useIsDesktop();
-  const { data: accounts = [] } = useAccounts();
+  const accounts = useAccountList();
   const addContribution = useAddContribution();
 
   const [amount, setAmount] = useState('');
