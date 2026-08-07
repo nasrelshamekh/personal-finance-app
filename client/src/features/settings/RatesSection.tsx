@@ -1,5 +1,6 @@
 import { TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RateAttribution } from '@/features/fx/RateAttribution';
 import { useSettings, useUpdateSettings } from './queries';
@@ -39,7 +40,18 @@ export function RatesSection() {
             aria-checked={settings.ratesApiEnabled}
             aria-label="Fetch rates automatically"
             disabled={update.isPending}
-            onClick={() => update.mutate({ ratesApiEnabled: !settings.ratesApiEnabled })}
+            onClick={() =>
+              update.mutate(
+                { ratesApiEnabled: !settings.ratesApiEnabled },
+                {
+                  onError: reportFailure(
+                    settings.ratesApiEnabled
+                      ? 'Automatic rates could not be switched off.'
+                      : 'Automatic rates could not be switched on.',
+                  ),
+                },
+              )
+            }
             className={cn(
               'relative h-6 w-11 shrink-0 rounded-full transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',

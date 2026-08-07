@@ -4,6 +4,8 @@ import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { Plus, Receipt, Trash2, TriangleAlert } from 'lucide-react';
 import type { TransactionDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { ApiError } from '@/lib/api';
+import { reportFailureNow } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -252,27 +254,60 @@ export function TransactionsPage() {
   async function bulkDelete() {
     // Sequential rather than parallel: deleting one side of a transfer removes both, so
     // firing them together would produce avoidable 404s on the partner row.
+    let failed = 0;
+    let lastError: unknown = null;
+
     for (const id of selected) {
       try {
         await remove.mutateAsync(id);
-      } catch {
-        // Already gone — most likely the other half of a transfer in the same selection.
+      } catch (caught) {
+        // A 404 is expected and not a failure: it is the other half of a transfer in the
+        // same selection, already removed with its partner. Anything else is real.
+        if (caught instanceof ApiError && caught.status === 404) continue;
+        failed += 1;
+        lastError = caught;
       }
     }
+
     setSelected(new Set());
+
+    if (failed > 0) {
+      reportFailureNow(
+        failed === 1
+          ? 'One transaction could not be deleted.'
+          : `${failed} transactions could not be deleted.`,
+        lastError,
+      );
+    }
   }
 
   async function bulkRecategorise(categoryId: string) {
+    // A partial result is the normal outcome here — an expense cannot take an income
+    // category — so the count is the message rather than an error on each row.
+    let failed = 0;
+    let lastError: unknown = null;
+
     for (const id of selected) {
       const row = rows.find((candidate) => candidate.id === id);
       if (row === undefined || row.type === 'TRANSFER') continue;
       try {
         await update.mutateAsync({ id, body: { categoryId } });
-      } catch {
-        // Kind mismatch — an expense cannot take an income category.
+      } catch (caught) {
+        failed += 1;
+        lastError = caught;
       }
     }
+
     setSelected(new Set());
+
+    if (failed > 0) {
+      reportFailureNow(
+        failed === 1
+          ? 'One transaction kept its category.'
+          : `${failed} transactions kept their categories.`,
+        lastError,
+      );
+    }
   }
 
   return (

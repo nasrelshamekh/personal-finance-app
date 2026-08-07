@@ -2,8 +2,11 @@
 
 Phase 8 of `SPEC.md` §12 asks for this list. The rule I applied when choosing: a weakness
 is something that makes the app *worse at its job*, not something that could be prettier.
-All three below were found by using the app against real data rather than by reading the
-code, and all three are fixed in this phase.
+All of them were found by using the app against real data rather than by reading the code,
+and all of them are fixed.
+
+The fourth was listed as "what I would fix next" when this document was first written, and
+was fixed straight afterwards.
 
 ---
 
@@ -98,10 +101,42 @@ representable in the UI instead of showing as "Any category".
   questions, not a defect in something that already exists, and inventing it under the
   heading of "polish" is how a phase stops ending.
 
-## What I would fix next
+---
 
-Inline mutation failures are quiet. The sheets surface an error properly; a single-button
-action in a list — archive an account, archive a category — calls `mutate` and shows
-nothing if it fails. Nothing is lost, and the row snaps back when the query refetches, but
-a failure should say so. That wants one shared surface for it rather than an error line
-copy-pasted into a dozen components, which is a small piece of design rather than a patch.
+## 4. Inline mutation failures were silent (fixed after the first three)
+
+**What was wrong.** The sheets surfaced errors properly, but a single-button action in a
+list — archive an account, mark a debt settled, copy last month's budgets — called
+`mutate()` with no error handler. TanStack Query caught the rejection, nothing rendered,
+and the row snapped back on the next refetch. Nothing was lost, but the app looked like it
+had simply ignored the click, which is indistinguishable from a dead button.
+
+`bulkRecategorise` was the worst of them: it caught and discarded every failure in the
+loop, so recategorising five expenses into an income category changed nothing and said
+nothing.
+
+**What was done.** `client/src/lib/action-feedback.ts` is one shared surface — a
+module-level store the region in `AppShell` subscribes to. A call site is one argument
+longer, not one hook heavier:
+
+```tsx
+remove.mutate(id, { onError: reportFailure(`${account.name} could not be archived.`) })
+```
+
+The headline must name its subject; with three rows on screen, "That could not be saved" is
+barely better than silence. The server's own message becomes the second line, because it is
+the specific half — "That account still has transactions."
+
+Two things fell out of building it:
+
+- **The messages do not auto-dismiss.** They started on a 10-second timer, and while
+  testing I twice missed the message entirely because the timer beat me to it. An error
+  that removes itself is the same silence the module exists to fix. They persist until
+  dismissed, capped at three.
+- **The region's bottom padding clears the mobile tab bar at `md`, not `sm`.** I first
+  wrote `sm:pb-6`, but `MobileNav` is `md:hidden` — so between 640px and 768px the message
+  sat on top of the tab bar, covering the way off the screen.
+
+Bulk actions report a count rather than one message per row, and `bulkDelete` now
+distinguishes a real failure from the expected 404 when both halves of a transfer are in
+the same selection.

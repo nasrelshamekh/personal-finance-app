@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Check, Monitor, Moon, Sun, Wallet } from 'lucide-react';
 import { THEME_MODES, type ThemeMode, type ThemePreset } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { useTheme } from '@/hooks/useTheme';
 import { PRESETS } from '@/providers/theme-context';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -76,19 +77,26 @@ export function SettingsPage() {
   const updateSettings = useUpdateSettings();
 
   /**
-   * The theme applies from localStorage and syncs to the Setting row afterwards (SPEC
-   * §11). Deliberately fire-and-forget: the choice has already taken effect locally, and a
-   * failed round trip is not worth interrupting anyone over — it will be sent again the
-   * next time either control is touched.
+   * The theme applies from localStorage and syncs to the Setting row afterwards (SPEC §11).
+   *
+   * The sync failing is not cosmetic even though the theme has already changed: the stored
+   * row is what a backup carries, so a silent failure here means a restore months later
+   * quietly brings back a theme you had moved on from. Hence it reports.
    */
   function chooseMode(next: ThemeMode) {
     setMode(next);
-    updateSettings.mutate({ themeMode: next });
+    updateSettings.mutate(
+      { themeMode: next },
+      { onError: reportFailure('The theme is applied, but could not be saved.') },
+    );
   }
 
   function choosePreset(next: ThemePreset) {
     setPreset(next);
-    updateSettings.mutate({ themePreset: next });
+    updateSettings.mutate(
+      { themePreset: next },
+      { onError: reportFailure('The preset is applied, but could not be saved.') },
+    );
   }
 
   return (

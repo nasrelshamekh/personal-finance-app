@@ -181,6 +181,29 @@ itself throws.
 A client-side navigation fires no page load, so without it a screen reader is given nothing
 to say when you activate a nav link.
 
+**A mutation fired from a list row must say when it fails.** There is nowhere in a row to
+put an error, so `lib/action-feedback.ts` is the shared surface — a module-level store the
+`ActionFeedback` region in `AppShell` subscribes to with `useSyncExternalStore`. A call
+site adds one argument:
+
+```tsx
+remove.mutate(id, { onError: reportFailure(`${account.name} could not be archived.`) })
+```
+
+The headline **must name its subject**; with several rows on screen "That could not be
+saved" is barely better than the silence it replaced. The `ApiError` message becomes the
+second line automatically. Use `reportFailureNow` when the error is already in hand — a
+bulk loop reports one count, not one message per row.
+
+Messages **do not auto-dismiss** (capped at three, with a close button). A timer meant a
+failure could disappear before it was read, which is the same silence again. The region's
+bottom padding switches at `md`, matching `MobileNav`'s `md:hidden` — at `sm` it covers the
+tab bar between 640px and 768px.
+
+Components with a natural place for an error — the sheets, the category manager, the manual
+rate editor — keep their inline message and do **not** also report, or the same failure is
+stated twice.
+
 **Don't name a context member `useSomething`.** `rules-of-hooks` decides what a hook is
 from the name alone, so `const { useValue } = useCalculator()` makes every call site an
 illegal hook call — even inside an `onClick`. The calculator's is `sendToTransaction`.

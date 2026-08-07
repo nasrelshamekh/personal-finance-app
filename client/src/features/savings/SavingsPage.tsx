@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { Check, Pencil, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { formatAmount, type SavingsGoalDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -87,7 +88,9 @@ function GoalCard({
             type="button"
             onClick={() => {
               if (window.confirm(`Delete ${goal.name} and its contributions?`)) {
-                remove.mutate(goal.id);
+                remove.mutate(goal.id, {
+                  onError: reportFailure(`${goal.name} could not be deleted.`),
+                });
               }
             }}
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-money-negative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

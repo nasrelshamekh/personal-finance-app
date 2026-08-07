@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react';
 import { formatAmount, type Currency, type ResolvedRateDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkline } from '@/components/shared/Sparkline';
 import { RateAge } from '@/components/shared/RateAge';
@@ -93,7 +94,13 @@ export function FxStrip() {
         {data?.apiEnabled === true && (
           <button
             type="button"
-            onClick={() => refresh.mutate()}
+            onClick={() =>
+              refresh.mutate(undefined, {
+                // Says "rates" rather than "nothing changed": a refresh can update some
+                // pairs and fail on others, and the Currency page is where you can see which.
+                onError: reportFailure('The rates could not be refreshed.'),
+              })
+            }
             disabled={refresh.isPending}
             className={cn(
               'shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors',

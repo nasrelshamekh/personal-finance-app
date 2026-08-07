@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { FxStrip } from '@/features/fx/FxStrip';
 import { CalculatorProvider } from '@/features/calculator/CalculatorProvider';
+import { ActionFeedback } from './ActionFeedback';
 import { MobileNav } from './MobileNav';
 import { RouteAnnouncer } from './RouteAnnouncer';
 import { Sidebar } from './Sidebar';
@@ -75,6 +76,7 @@ export function AppShell() {
           </div>
 
           <MobileNav />
+          <ActionFeedback />
         </div>
       </CalculatorProvider>
     </TooltipProvider>

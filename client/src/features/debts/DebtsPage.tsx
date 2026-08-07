@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { CreditCard, Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatAmount, type DebtDirection, type DebtDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -86,7 +87,11 @@ function DebtCard({
             type="button"
             onClick={() => {
               if (window.confirm(`Delete the debt with ${debt.counterparty} and its payments?`)) {
-                remove.mutate(debt.id);
+                remove.mutate(debt.id, {
+                  onError: reportFailure(
+                    `The debt with ${debt.counterparty} could not be deleted.`,
+                  ),
+                });
               }
             }}
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-money-negative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -137,7 +142,16 @@ function DebtCard({
         <button
           type="button"
           onClick={() =>
-            update.mutate({ id: debt.id, body: { status: settled ? 'ACTIVE' : 'SETTLED' } })
+            update.mutate(
+              { id: debt.id, body: { status: settled ? 'ACTIVE' : 'SETTLED' } },
+              {
+                onError: reportFailure(
+                  settled
+                    ? `The debt with ${debt.counterparty} could not be reopened.`
+                    : `The debt with ${debt.counterparty} could not be marked settled.`,
+                ),
+              },
+            )
           }
           className="rounded-md border border-border px-2.5 py-1.5 text-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >

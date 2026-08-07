@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Archive, ArchiveRestore, Pencil, Plus, Wallet } from 'lucide-react';
 import { formatAmount, type AccountDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -139,9 +140,14 @@ export function AccountsPage() {
                       // archived, an empty one is removed. Deleting a used account would
                       // either orphan its rows or take them with it (SPEC §5).
                       if (account.isArchived) {
-                        update.mutate({ id: account.id, body: { isArchived: false } });
+                        update.mutate(
+                          { id: account.id, body: { isArchived: false } },
+                          { onError: reportFailure(`${account.name} could not be restored.`) },
+                        );
                       } else {
-                        remove.mutate(account.id);
+                        remove.mutate(account.id, {
+                          onError: reportFailure(`${account.name} could not be archived.`),
+                        });
                       }
                     }}
                     aria-label={

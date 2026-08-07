@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { ArrowLeft, ArrowRight, Coins, Copy } from 'lucide-react';
 import { formatAmount, type BudgetRowDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -209,7 +210,10 @@ export function BudgetsPage() {
             <button
               type="button"
               onClick={() =>
-                copy.mutate({ fromMonth: shiftMonth(month, -1), toMonth: month, overwrite: false })
+                copy.mutate(
+                  { fromMonth: shiftMonth(month, -1), toMonth: month, overwrite: false },
+                  { onError: reportFailure("Last month's budgets could not be copied.") },
+                )
               }
               disabled={copy.isPending}
               className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
