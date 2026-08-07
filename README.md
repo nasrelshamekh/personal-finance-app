@@ -98,6 +98,10 @@ an `ORDER BY`, and a fake repository would test a reimplementation of the rule r
 the one that actually runs. Each test runs inside a transaction that is always rolled back,
 so your own data is never touched.
 
+Client tests need nothing at all — jsdom and Testing Library, no server, no database. Run
+just those with `npm run test --workspace client`, or watch them with
+`npm run test:watch --workspace client`.
+
 ---
 
 ## How it works

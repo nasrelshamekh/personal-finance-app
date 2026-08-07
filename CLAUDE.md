@@ -335,6 +335,37 @@ and a rolled-back transaction isolates a test from its own file but not from ano
 committing rows mid-transaction — which showed up as counts intermittently off by exactly
 the number of rows another file had written.
 
+### Client tests
+
+`jsdom` + Testing Library, `src/**/*.test.{ts,tsx}` beside the code they cover. **No
+database and no server** — nothing here talks to the API, so `npm run test --workspace
+client` runs anywhere in about a second.
+
+`client/vitest.config.ts` is `mergeConfig(viteConfig, …)` rather than a second config. The
+`@` and `@ledger/shared` aliases already live in `vite.config.ts` and `shared/` is consumed
+as source, so restating them would be a third place for the same path to drift. The react
+plugin comes along with it, which is what compiles JSX in a test file.
+
+`src/test/setup.ts` runs first and does three things, all of which a component test fails
+without:
+
+- registers `afterEach(cleanup)` — Testing Library auto-cleans only when vitest globals
+  are on, and they are off here to match the other workspaces, so without it the previous
+  test's DOM is still mounted and `getByRole` finds two of everything;
+- stubs `window.matchMedia`, which jsdom does not implement at all — `ThemeProvider` and
+  `useMediaQuery` both call it during render;
+- stubs `ResizeObserver` for Radix and recharts, which measure and throw rather than
+  degrade.
+
+**A test that cannot fail is worth nothing.** Both suites here were checked by breaking the
+code on purpose — `MAX_VISIBLE` 3 → 5 and `toFixed(2)` → `toFixed(4)` — and confirming the
+right tests went red. Do that for anything load-bearing you add.
+
+Prefer driving a controlled component through a real parent (see `MoneyInput.test.tsx`'s
+`Harness`) over asserting on a value the test itself supplied. The store is outside React,
+so pushing to it inside a component test has to be wrapped in `act` for the re-render to
+flush.
+
 ## House rules
 
 - No placeholder code, no `// TODO: implement`, no mock data in a shipped path. If a phase
