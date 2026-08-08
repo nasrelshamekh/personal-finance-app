@@ -6,6 +6,9 @@ import type {
   DashboardDto,
   DebtDto,
   DebtPaymentDto,
+  FxRatesResponse,
+  ResolvedRateDto,
+  StoredRateDto,
   SavingsContributionDto,
   SavingsGoalDto,
   TransactionDto,
@@ -183,6 +186,49 @@ export function savingsGoal(
     monthsRemaining: null,
     contributions: [],
     createdAt: '2026-08-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/**
+ * A resolved rate: fresh, direct, one day old. Every field the UI branches on — `stale`,
+ * `staleReason`, `derivation`, a negative `ageMs` — is an override away.
+ */
+export function resolvedRate(overrides: Partial<ResolvedRateDto> = {}): ResolvedRateDto {
+  return {
+    base: 'USD',
+    quote: 'EGP',
+    rate: '49.80290000',
+    asOf: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    nextUpdateAt: null,
+    source: 'API',
+    derivation: 'DIRECT',
+    stale: false,
+    staleReason: null,
+    ageMs: 24 * 60 * 60 * 1000,
+    ...overrides,
+  };
+}
+
+export function fxRates(overrides: Partial<FxRatesResponse> = {}): FxRatesResponse {
+  return {
+    rates: [resolvedRate()],
+    autoRefresh: 'FRESH',
+    apiEnabled: true,
+    apiEolAt: null,
+    attribution: { label: 'Exchange Rate API', url: 'https://www.exchangerate-api.com' },
+    ...overrides,
+  };
+}
+
+export function storedRate(overrides: Partial<StoredRateDto> & { id: string }): StoredRateDto {
+  return {
+    base: 'USD',
+    quote: 'EGP',
+    rate: '49.80290000',
+    asOf: '2026-08-06T00:00:00.000Z',
+    nextUpdateAt: null,
+    source: 'API',
     ...overrides,
   };
 }
