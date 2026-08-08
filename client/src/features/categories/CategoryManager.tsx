@@ -53,7 +53,12 @@ export function CategoryManager() {
     try {
       await create.mutateAsync({
         name: newName.trim(),
-        // A child must share its parent's kind, so the parent's wins when one is chosen.
+        /*
+         * A child must share its parent's kind. `parentOptions` already filters to the
+         * selected kind, so these two are always equal in practice — reading the parent's
+         * is belt-and-braces against that filter changing, not a live branch, and no test
+         * can reach the fallback while the filter stands.
+         */
         kind: parent?.kind ?? newKind,
         color: newColor,
         icon: 'tag',

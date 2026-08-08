@@ -47,6 +47,23 @@ Object.defineProperty(window, 'ResizeObserver', {
 });
 
 /**
+ * jsdom's `Blob` has no `text()`, so `await file.text()` throws rather than resolving.
+ * The import flow reads a chosen backup that way, and without this every upload lands in
+ * the "that file is not JSON" branch — a green-looking test asserting the wrong thing.
+ * `FileReader` does exist, so the polyfill is a real read rather than a stub.
+ */
+if (typeof Blob.prototype.text !== 'function') {
+  Blob.prototype.text = function readAsText(this: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', () => resolve(String(reader.result)));
+      reader.addEventListener('error', () => reject(reader.error));
+      reader.readAsText(this);
+    });
+  };
+}
+
+/**
  * Radix's Select drives its listbox with pointer capture and scrolls the active option
  * into view. jsdom implements none of these — without them, opening a `<Select>` throws
  * `target.hasPointerCapture is not a function` before the options ever render.
