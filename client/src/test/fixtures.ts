@@ -255,6 +255,8 @@ export function budgetMonth(overrides: Partial<BudgetMonthDto> = {}): BudgetMont
     totalLimitEgp: '0.0000',
     totalSpentEgp: '0.0000',
     totalRemainingEgp: '0.0000',
+    unbudgetedSpentEgp: '0.0000',
+    uncategorisedSpentEgp: '0.0000',
     ...overrides,
   };
 }

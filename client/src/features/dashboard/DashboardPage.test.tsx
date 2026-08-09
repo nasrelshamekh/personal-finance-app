@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { DashboardDto } from '@ledger/shared';
 import { stubApi, type ApiStub } from '@/test/http';
-import { dashboard, transaction } from '@/test/fixtures';
+import { account, dashboard, transaction } from '@/test/fixtures';
 import { DashboardPage } from './DashboardPage';
 
 /**
@@ -16,15 +16,21 @@ import { DashboardPage } from './DashboardPage';
  * outgoing links somewhere you can act on it.
  */
 
-function Harness() {
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="search">{location.search}</output>;
+}
+
+function Harness({ initialUrl = '/' }: { initialUrl?: string }) {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   );
 
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialUrl]}>
         <DashboardPage />
+        <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -218,6 +224,39 @@ describe('the figures', () => {
     // 7386.00 + (−1949.84), summed across currencies from the frozen EGP figures.
     expect(within(card as HTMLElement).getByText(/5,436\.16/)).toBeInTheDocument();
   });
+
+  /**
+   * The total is a sum of money, so it is a `Decimal` sum. It used to be
+   * `reduce((sum, a) => sum + Number.parseFloat(a.balanceEgp), 0)` — floating point, on a
+   * screen whose entire promise is not lying about money (SPEC §4).
+   *
+   * The figures below are deliberately past 2^53, because that is where the difference
+   * survives rounding to four places: at everyday balances a float is wrong by about a
+   * hundred-billionth of a pound and no assertion could ever see it. The rule is what is
+   * being pinned, not the magnitude.
+   */
+  it('adds the balances as decimals, not as floats', async () => {
+    arrange(
+      dashboard({
+        netWorth: {
+          egp: '9007199254740992.4500',
+          previousEgp: '0.0000',
+          deltaEgp: '9007199254740992.4500',
+          deltaPct: null,
+        },
+        accounts: [
+          { ...account({ id: 'a', name: 'One' }), balanceEgp: '9007199254740992.0000' },
+          { ...account({ id: 'b', name: 'Two' }), balanceEgp: '0.4500' },
+        ],
+      }),
+    );
+    render(<Harness />);
+
+    const hint = await screen.findByText('Across every currency, in pounds.');
+    const card = hint.closest('article') as HTMLElement;
+
+    expect(within(card).getByText('9,007,199,254,740,992.45')).toBeInTheDocument();
+  });
 });
 
 describe('where it went', () => {
@@ -384,6 +423,113 @@ describe('debts and savings', () => {
 
     const bar = container.querySelector('.bg-primary.h-full, .h-full.rounded-full.bg-primary');
     expect((bar as HTMLElement | null)?.style.width).toBe('100%');
+  });
+});
+
+/**
+ * The month is state that changes what the whole screen says, so it belongs in the URL —
+ * the same rule the transaction filters follow. Held in `useState` it was invisible from
+ * outside: `?month=2026-07` did nothing, a reload snapped back to today, and following a
+ * category link out and pressing Back returned to the current month rather than the one
+ * being read.
+ */
+describe('the month in the address', () => {
+  it('opens on the month it was asked for', async () => {
+    arrange(dashboard({ month: '2026-03' }));
+    render(<Harness initialUrl="/?month=2026-03" />);
+
+    await waitFor(() => expect(monthsAsked()).toContain('2026-03'));
+    expect(screen.getByText('March 2026')).toBeInTheDocument();
+  });
+
+  it('writes the month back, so the screen can be linked to and reloaded', async () => {
+    const user = userEvent.setup();
+    arrange(dashboard());
+    render(<Harness />);
+
+    await screen.findByText(/\d{4}/);
+    await user.click(screen.getByRole('button', { name: 'Previous month' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search')).toHaveTextContent(`month=${previousMonth()}`),
+    );
+  });
+
+  /**
+   * The current month is the default *and* a moving one. Pinning it into the address would
+   * make a bookmarked dashboard quietly show the wrong month from the first of next month.
+   */
+  it('leaves the current month out of the address rather than pinning it', async () => {
+    const user = userEvent.setup();
+    arrange(dashboard());
+    render(<Harness />);
+
+    await screen.findByText(/\d{4}/);
+    await user.click(screen.getByRole('button', { name: 'Previous month' }));
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('month='));
+
+    await user.click(screen.getByRole('button', { name: 'Next month' }));
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
+    expect(monthsAsked().at(-1)).toBe(thisMonth());
+  });
+
+  /** A stale or hand-typed month should not be forwarded to the API to 400 on. */
+  it('ignores a month that is not a month', async () => {
+    arrange(dashboard());
+    render(<Harness initialUrl="/?month=last-tuesday" />);
+
+    await waitFor(() => expect(monthsAsked()).toEqual([thisMonth()]));
+  });
+});
+
+/**
+ * A month with nothing in it is two different situations, and only one of them is a
+ * to-do list. Once the payload was scoped to the month, a past month started returning
+ * no accounts and no rows — and the ledger-is-empty copy would have told someone with two
+ * accounts to go and add an account.
+ */
+describe('a month with nothing in it', () => {
+  it('names the month rather than claiming the ledger is empty', async () => {
+    arrange(dashboard({ month: previousMonth() }));
+    render(<Harness initialUrl={`/?month=${previousMonth()}`} />);
+
+    expect(await screen.findByText(/^Nothing in /)).toBeInTheDocument();
+    expect(screen.queryByText('Nothing to summarise yet')).toBeNull();
+  });
+
+  it('still says how to start when it is the current month and there is nothing', async () => {
+    arrange(dashboard());
+    render(<Harness />);
+
+    expect(await screen.findByText('Nothing to summarise yet')).toBeInTheDocument();
+  });
+});
+
+describe('the recent panel', () => {
+  it('scopes its link out to the month being read', async () => {
+    arrange(
+      dashboard({
+        month: '2026-03',
+        netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+      }),
+    );
+    render(<Harness initialUrl="/?month=2026-03" />);
+
+    const link = await screen.findByRole('link', { name: 'All transactions' });
+    expect(link).toHaveAttribute('href', '/transactions?from=2026-03-01&to=2026-03-31');
+  });
+
+  it('says the month is empty rather than that nothing was ever recorded', async () => {
+    arrange(
+      dashboard({
+        netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+        recentTransactions: [],
+      }),
+    );
+    render(<Harness />);
+
+    expect(await screen.findByText('Nothing recorded this month.')).toBeInTheDocument();
   });
 });
 

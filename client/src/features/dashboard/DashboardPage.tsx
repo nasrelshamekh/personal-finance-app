@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { ArrowLeft, ArrowRight, LayoutDashboard } from 'lucide-react';
-import { formatAmount, type DashboardDto } from '@ledger/shared';
+import { ArrowLeft, ArrowRight, CalendarOff, LayoutDashboard } from 'lucide-react';
+import { Decimal, formatAmount, type DashboardDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { currentMonth, monthDayRange, shiftMonth, useMonth } from '@/hooks/useMonth';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -11,17 +12,6 @@ import { CountUp } from '@/components/shared/CountUp';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CategoryDonut, CategoryLegend, DailyBars } from './charts';
 import { useDashboard } from './queries';
-
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-function shiftMonth(month: string, delta: number): string {
-  const [year, index] = month.split('-').map(Number);
-  const date = new Date(Date.UTC(year ?? 2026, (index ?? 1) - 1 + delta, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 function MonthPicker({ month, onChange }: { month: string; onChange: (next: string) => void }) {
   const label = format(parseISO(`${month}-01`), 'MMMM yyyy');
@@ -98,8 +88,9 @@ function NetWorthCard({ data }: { data: DashboardDto }) {
 }
 
 export function DashboardPage() {
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useMonth();
   const { data, isPending, isError } = useDashboard(month);
+  const isCurrentMonth = month === currentMonth();
 
   const hasAnything = useMemo(() => {
     if (data === undefined) return false;
@@ -109,6 +100,17 @@ export function DashboardPage() {
       Number.parseFloat(data.netWorth.egp) !== 0
     );
   }, [data]);
+
+  const totalInAccounts = useMemo(
+    () =>
+      (data?.accounts ?? [])
+        .reduce((running, account) => running.plus(account.balanceEgp), new Decimal(0))
+        .toFixed(4),
+    [data],
+  );
+
+  const range = monthDayRange(month);
+  const monthLabel = format(parseISO(`${month}-01`), 'MMMM yyyy');
 
   return (
     <>
@@ -133,11 +135,25 @@ export function DashboardPage() {
         </p>
       )}
 
-      {data !== undefined && !hasAnything && (
+      {/*
+        Two different silences. On the current month it means the ledger is empty and the
+        thing to do is add an account. On a past one it usually means the ledger simply
+        did not exist yet — telling someone with two accounts to "add an account" because
+        they stepped back to July is how a screen loses your trust.
+      */}
+      {data !== undefined && !hasAnything && isCurrentMonth && (
         <EmptyState
           icon={LayoutDashboard}
           title="Nothing to summarise yet"
           description="Add an account and your first transaction, and this fills with your net worth, the month's income and spending, and what converting cost you."
+        />
+      )}
+
+      {data !== undefined && !hasAnything && !isCurrentMonth && (
+        <EmptyState
+          icon={CalendarOff}
+          title={`Nothing in ${monthLabel}`}
+          description="No accounts existed and nothing moved in this month. Step forward with the arrows, or use the sidebar to see where your money is now."
         />
       )}
 
@@ -176,14 +192,12 @@ export function DashboardPage() {
             </StatCard>
 
             <StatCard label="Accounts" hint="Across every currency, in pounds.">
-              <Money
-                value={data.accounts
-                  .reduce((sum, account) => sum + Number.parseFloat(account.balanceEgp), 0)
-                  .toFixed(4)}
-                currency="EGP"
-                size="lg"
-                tone="plain"
-              />
+              {/*
+                Decimal, not a float sum. These are monetary figures and SPEC §4 does not
+                make an exception for a total that is only being displayed — three accounts
+                and a `+` is exactly how drift gets in.
+              */}
+              <Money value={totalInAccounts} currency="EGP" size="lg" tone="plain" />
             </StatCard>
           </section>
 
@@ -218,8 +232,9 @@ export function DashboardPage() {
                 <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   Recent
                 </h3>
+                {/* Carries the month, so the list opens on what is being read here. */}
                 <Link
-                  to="/transactions"
+                  to={`/transactions?from=${range.from}&to=${range.to}`}
                   className="text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   All transactions
@@ -227,7 +242,7 @@ export function DashboardPage() {
               </div>
 
               {data.recentTransactions.length === 0 ? (
-                <p className="mt-6 text-sm text-muted-foreground">Nothing recorded yet.</p>
+                <p className="mt-6 text-sm text-muted-foreground">Nothing recorded this month.</p>
               ) : (
                 <ul className="mt-3 divide-y divide-border">
                   {data.recentTransactions.map((row) => (

@@ -93,8 +93,10 @@ representable in the UI instead of showing as "Any category".
 
 ## Things I considered and did not count
 
-- **The accounts screen has no per-account sparkline or drill-down** (`SPEC.md` §9). True,
-  and it is a real gap — but it is a missing enhancement, not something that misleads.
+- **The accounts screen has no per-account sparkline** (`SPEC.md` §9). True, and it is a
+  real gap — but it is a missing enhancement, not something that misleads. *(The drill-down
+  this entry originally also claimed was missing does exist: each card links through to
+  `/transactions?accountId=…`.)*
 - **The transactions table is dense at 1280px.** Genuinely tight, but it is the deliberate
   instrument-panel density from §10, and no figure is unreadable.
 - **No undo on a bulk delete.** Worth having. It is a new feature with its own design
@@ -140,3 +142,53 @@ Two things fell out of building it:
 Bulk actions report a count rather than one message per row, and `bulkDelete` now
 distinguishes a real failure from the expected 404 when both halves of a transfer are in
 the same selection.
+
+---
+
+## 5. What using it on real data turned up
+
+The four above came out of Phase 8's review, with the app open on one screen at a time.
+These came out of actually *using* it afterwards — moving between months, following links
+back and forth, reading the same figures from two directions. The ledger was eight
+transactions, two accounts, one debt, one budget, and seven of the eight rows
+uncategorised. That last detail is the point: seed data is tidy, and most of what follows
+is invisible against tidy data.
+
+**The dashboard described three different moments at once.** Stepping back to July showed
+`NET WORTH 0.00` beside `ACCOUNTS 5,436.16` and a list of August transactions. Net worth
+and the month totals were scoped to the month; the accounts panel and the recent list were
+not. Each panel was individually correct, which is exactly why nothing caught it. The
+account balances are now taken at the end of the month being read, from the same two terms
+as `netWorthAt` — so the panel adds up to the figure printed above it, and a server test
+asserts that invariant rather than trusting it.
+
+**The month was the last piece of state hiding in `useState`.** `?month=2026-07` did
+nothing, a reload dropped you back to today, and the dashboard's own category links carried
+the month *out* to the transactions list while being unable to accept one back — so
+following a link and pressing Back landed you in the current month. The same rule the
+transaction filters already followed (`hooks/useMonth.ts`).
+
+**Budgets reassured while ignoring 99% of the spending.** It read `BUDGETED 1,800 · SPENT
+100 · LEFT 1,700` in a month where 9,423.84 went out, because only budgeted categories are
+counted and almost everything was uncategorised. Both figures were true and the screen was
+misleading. It now states what the totals cannot see, names the uncategorised part, and
+links straight to those rows. Reported rather than folded in: money you did not budget for
+is not money you overspent, but it is money you spent.
+
+**The accounts total on the dashboard was a float sum.** `reduce((sum, a) => sum +
+Number.parseFloat(a.balanceEgp), 0)` — on the one screen whose whole promise is not lying
+about money (SPEC §4). Two accounts hide it completely; the rule does not care.
+
+**The app held two opinions about what day it is.** Four sheets read the local date, the
+account sheet read the UTC one. In Cairo those differ from 22:00, so for the last two hours
+of every day a new account opened "yesterday" while a transaction entered a second later was
+dated today. Found because a test I had written the evening before failed after midnight —
+it was restating the rule in the other timezone rather than checking it. Both now go
+through `lib/dates.ts`.
+
+Still open, and deliberately not fixed here: the transactions list is a wall of
+"Uncategorised" when rows carry neither note nor category; the row checkboxes are labelled
+by date alone, so five rows on the same day are five identical labels; and bulk
+recategorise offers income and expense categories mixed together, so part of a mixed
+selection is guaranteed to fail. The server rejects the mismatches and the count is
+reported honestly, so nothing breaks — it is just a choice offered that cannot work.

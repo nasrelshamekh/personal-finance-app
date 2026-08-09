@@ -41,6 +41,8 @@ export async function makeAccount(
     openingBalance?: string;
     openingRateToEgp?: string;
     openingBalanceEgp?: string;
+    /** When the account came into existence — a dashboard read before it excludes it. */
+    openingDate?: Date;
     isArchived?: boolean;
   },
 ): Promise<Account> {
@@ -53,7 +55,7 @@ export async function makeAccount(
       type: 'CASH',
       currency: values.currency,
       openingBalance,
-      openingDate: new Date('2026-07-01T00:00:00.000Z'),
+      openingDate: values.openingDate ?? new Date('2026-07-01T00:00:00.000Z'),
       openingRateToEgp: openingRate,
       openingBalanceEgp:
         values.openingBalanceEgp ??

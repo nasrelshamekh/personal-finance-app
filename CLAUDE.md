@@ -166,6 +166,28 @@ state, which meant every `?accountId=…` link — the account cards, the dashbo
 — navigated and then showed everything, looking exactly like a filter that had silently
 failed. Anything filterable that something else links to must read the URL.
 
+**The selected month is a filter.** `hooks/useMonth.ts` is the one place that reads and
+writes it, used by the dashboard and by budgets; both used to hold it in `useState`, so
+`/?month=2026-07` did nothing, a reload snapped back to today, and following a category
+link out and pressing Back returned to the current month rather than the one being read.
+The current month is deliberately *absent* from the URL rather than written into it — it is
+a moving default, and pinning it would make a bookmark quietly wrong next month. A `month=`
+that is not `YYYY-MM` is ignored rather than forwarded to the API to 400 on.
+
+**Everything under one month picker describes that month.** The dashboard payload used to
+mix scopes: net worth and the totals were month-scoped while the accounts panel and the
+recent list were not, so reading July showed a net worth of zero beside today's balances
+and a list of August rows — three panels, three moments, each individually correct.
+`buildAccounts` in the dashboard service takes the same two terms as `netWorthAt`, in the
+same order, so the panel adds up to the figure printed above it; a server test asserts
+exactly that. If you add a panel here, scope it or say plainly that it is not scoped.
+
+**"Today" is the local date.** `lib/dates.ts` owns it. `toISOString().slice(0, 10)` is the
+UTC date, which in Cairo is still yesterday from 22:00 — the account sheet used that while
+every other sheet used local parts, so late in the evening a new account opened "yesterday"
+and a transaction entered a second later was dated today. Months are the other way round
+(`useMonth` is UTC): those key server ranges, which are UTC, and nobody types one by hand.
+
 `categoryId=none` (the `UNCATEGORISED` constant in `shared/src/dto/transactions.ts`) means
 "rows with no category". Uncategorised is a real bucket and usually the biggest one early
 on, so it has to be filterable; a sentinel rather than an empty value, because an empty

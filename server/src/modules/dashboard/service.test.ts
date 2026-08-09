@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Decimal } from '@ledger/shared';
 import { clearCategories, withRollback } from '../../test/db';
 import { makeAccount, makeCategory, makeStandardRates } from '../../test/factories';
 import { createTransaction } from '../transactions/service';
@@ -353,6 +354,185 @@ describe('breakdowns', () => {
       await clean(tx);
       const dashboard = await getDashboard(tx, undefined, NOW);
       expect(dashboard.month).toBe('2026-08');
+    });
+  });
+});
+
+/**
+ * Everything on this screen sits under one month picker, so everything on it has to
+ * describe the same month.
+ *
+ * It did not. Net worth and the totals were scoped; the accounts panel and the recent list
+ * were not — so reading July showed a net worth of zero beside today's balances and a list
+ * of August rows. Each panel was individually correct and the screen as a whole was a lie.
+ */
+describe('one month, one answer', () => {
+  describe('the accounts panel', () => {
+    it('shows the balance as at the end of the month, not as it stands now', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        const account = await makeAccount(tx, { currency: 'EGP', openingBalance: '1000.0000' });
+
+        await createTransaction(tx, {
+          type: 'INCOME',
+          amount: '500',
+          accountId: account.id,
+          categoryId: null,
+          date: IN_JULY,
+          note: null,
+        });
+        await createTransaction(tx, {
+          type: 'INCOME',
+          amount: '9000',
+          accountId: account.id,
+          categoryId: null,
+          date: IN_AUGUST,
+          note: null,
+        });
+
+        const july = await getDashboard(tx, '2026-07', NOW);
+        const august = await getDashboard(tx, '2026-08', NOW);
+
+        expect(july.accounts[0]?.balance).toBe('1500.0000');
+        expect(august.accounts[0]?.balance).toBe('10500.0000');
+      });
+    });
+
+    /**
+     * The invariant the fix exists for, and the one worth keeping: net worth *is* the sum
+     * of these balances. If the two are ever computed from different sets of rows again,
+     * this is what catches it.
+     */
+    it('adds up to the net worth printed above it', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        const cash = await makeAccount(tx, { currency: 'EGP', openingBalance: '2000.0000' });
+        const bank = await makeAccount(tx, {
+          currency: 'USD',
+          openingBalance: '100.0000',
+          openingRateToEgp: '50',
+        });
+
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '250',
+          accountId: cash.id,
+          categoryId: null,
+          date: IN_AUGUST,
+          note: null,
+        });
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '10',
+          accountId: bank.id,
+          categoryId: null,
+          date: IN_AUGUST,
+          note: null,
+        });
+
+        for (const month of ['2026-07', '2026-08']) {
+          const dashboard = await getDashboard(tx, month, NOW);
+          const total = dashboard.accounts.reduce(
+            (running, account) => running.plus(account.balanceEgp),
+            new Decimal(0),
+          );
+
+          expect(total.toFixed(4)).toBe(dashboard.netWorth.egp);
+        }
+      });
+    });
+
+    /** An account opened in August did not exist in July, and July should not claim it did. */
+    it('leaves out an account that did not exist yet', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        await makeAccount(tx, {
+          currency: 'EGP',
+          openingBalance: '5000.0000',
+          openingDate: new Date('2026-08-01T00:00:00.000Z'),
+        });
+
+        expect((await getDashboard(tx, '2026-07', NOW)).accounts).toHaveLength(0);
+        expect((await getDashboard(tx, '2026-08', NOW)).accounts).toHaveLength(1);
+      });
+    });
+
+    it('leaves out archived accounts, as the accounts screen does', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        await makeAccount(tx, { currency: 'EGP', isArchived: true });
+
+        expect((await getDashboard(tx, '2026-08', NOW)).accounts).toHaveLength(0);
+      });
+    });
+  });
+
+  describe('the recent list', () => {
+    it('shows only what happened in the month being read', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        const account = await makeAccount(tx, { currency: 'EGP' });
+
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '100',
+          accountId: account.id,
+          categoryId: null,
+          date: IN_JULY,
+          note: 'july',
+        });
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '200',
+          accountId: account.id,
+          categoryId: null,
+          date: IN_AUGUST,
+          note: 'august',
+        });
+
+        const july = await getDashboard(tx, '2026-07', NOW);
+        const august = await getDashboard(tx, '2026-08', NOW);
+
+        expect(july.recentTransactions.map((row) => row.note)).toEqual(['july']);
+        expect(august.recentTransactions.map((row) => row.note)).toEqual(['august']);
+      });
+    });
+
+    it('is empty for a month in which nothing happened', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        const account = await makeAccount(tx, { currency: 'EGP' });
+        await createTransaction(tx, {
+          type: 'EXPENSE',
+          amount: '100',
+          accountId: account.id,
+          categoryId: null,
+          date: IN_AUGUST,
+          note: null,
+        });
+
+        expect((await getDashboard(tx, '2026-07', NOW)).recentTransactions).toHaveLength(0);
+      });
+    });
+
+    it('still stops at six', async () => {
+      await withRollback(async (tx) => {
+        await clean(tx);
+        const account = await makeAccount(tx, { currency: 'EGP' });
+
+        for (let index = 0; index < 8; index += 1) {
+          await createTransaction(tx, {
+            type: 'EXPENSE',
+            amount: '10',
+            accountId: account.id,
+            categoryId: null,
+            date: IN_AUGUST,
+            note: `row ${index}`,
+          });
+        }
+
+        expect((await getDashboard(tx, '2026-08', NOW)).recentTransactions).toHaveLength(6);
+      });
     });
   });
 });

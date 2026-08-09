@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Minus, Plus } from 'lucide-react';
 import type { TransactionDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
@@ -32,11 +33,6 @@ const MODE_META: Record<Mode, { label: string; icon: typeof Plus }> = {
   INCOME: { label: 'Income', icon: Plus },
   TRANSFER: { label: 'Transfer', icon: ArrowLeftRight },
 };
-
-function todayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
 
 /** More than 48h back is where a rate stops being today's (D12). */
 function isBackdated(dateIso: string): boolean {

@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { DebtDto } from '@ledger/shared';
 import { stubApi, type ApiStub } from '@/test/http';
+import { todayIso } from '@/lib/dates';
 import { debt } from '@/test/fixtures';
 import { DebtSheet } from './DebtSheet';
 
@@ -100,11 +101,19 @@ describe('recording one', () => {
     expect(created()['note']).toBeNull();
   });
 
+  /**
+   * "Today" is the local date, not the UTC one. Asserting `toISOString().slice(0, 10)` here
+   * passed all evening and then failed after local midnight, when UTC was still on
+   * yesterday — the test was restating the rule in a different timezone rather than
+   * checking it. That mismatch was real in the app too: every sheet but this one read the
+   * local date, so `AccountSheet` opened an account "yesterday" for the last two hours of
+   * every day. Both now go through `todayIso`.
+   */
   it('defaults to a debt you owe, and starts today', async () => {
     render(<Harness />);
 
     expect(screen.getByRole('button', { name: 'I owe' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Started')).toHaveValue(new Date().toISOString().slice(0, 10));
+    expect(screen.getByLabelText('Started')).toHaveValue(todayIso());
   });
 
   /** The question changes with the direction, because "counterparty" answers neither. */

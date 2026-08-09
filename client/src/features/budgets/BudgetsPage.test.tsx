@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { BudgetMonthDto } from '@ledger/shared';
 import { stubApi, type ApiStub } from '@/test/http';
 import { budgetMonth, budgetRow } from '@/test/fixtures';
@@ -18,7 +19,16 @@ import { BudgetsPage } from './BudgetsPage';
  * sense because of that split.
  */
 
-function Harness() {
+/**
+ * A `<span>`, not an `<output>`: this page already has a live region reporting what a copy
+ * did, and an `<output>` would be a second `role="status"` for `getByRole` to trip over.
+ */
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="search">{location.search}</span>;
+}
+
+function Harness({ initialUrl = '/budgets' }: { initialUrl?: string }) {
   const [client] = useState(
     () =>
       new QueryClient({
@@ -28,7 +38,10 @@ function Harness() {
 
   return (
     <QueryClientProvider client={client}>
-      <BudgetsPage />
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <BudgetsPage />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -299,6 +312,110 @@ describe('the month picker', () => {
     render(<Harness />);
 
     expect(await screen.findByRole('button', { name: 'Next month' })).toBeEnabled();
+  });
+
+  /** The month belongs in the URL, for the same reasons the transaction filters do. */
+  it('opens on the month it was asked for', async () => {
+    arrange(budgetMonth({ rows: [RENT], month: '2026-03' }));
+    render(<Harness initialUrl="/budgets?month=2026-03" />);
+
+    await waitFor(() =>
+      expect(api.requestsFor('GET /budgets')[0]?.query.get('month')).toBe('2026-03'),
+    );
+    expect(screen.getByText('March 2026')).toBeInTheDocument();
+  });
+
+  it('writes the month back so the screen can be linked to', async () => {
+    const user = userEvent.setup();
+    arrange(budgetMonth({ rows: [RENT] }));
+    render(<Harness />);
+
+    await findLimitFor('Rent');
+    await user.click(screen.getByRole('button', { name: 'Previous month' }));
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('month='));
+  });
+});
+
+/**
+ * The three totals describe the *budgets*, not the month. On a real ledger those are
+ * different numbers by an order of magnitude — "spent 100, 1,700 left" while nine thousand
+ * pounds went out uncategorised — and a screen that only reports the flattering half is
+ * worse than one that reports nothing.
+ */
+describe('spending the budgets cannot see', () => {
+  const withUnbudgeted = budgetMonth({
+    rows: [RENT],
+    totalLimitEgp: '1800.0000',
+    totalSpentEgp: '100.0000',
+    totalRemainingEgp: '1700.0000',
+    unbudgetedSpentEgp: '9323.8400',
+    uncategorisedSpentEgp: '9323.8400',
+  });
+
+  it('states what went out beyond the budgeted categories', async () => {
+    arrange(withUnbudgeted);
+    render(<Harness />);
+
+    expect(await screen.findByText(/9,323\.84 EGP/)).toBeInTheDocument();
+    expect(screen.getByText(/outside these budgets/)).toBeInTheDocument();
+  });
+
+  it('names the uncategorised part, which is the part you can act on', async () => {
+    arrange(withUnbudgeted);
+    render(<Harness />);
+
+    await screen.findByText(/outside these budgets/);
+    expect(screen.getByText(/with no category at all/)).toBeInTheDocument();
+  });
+
+  it('links straight to those transactions, scoped to the month', async () => {
+    arrange(budgetMonth({ ...withUnbudgeted, month: '2026-03' }));
+    render(<Harness initialUrl="/budgets?month=2026-03" />);
+
+    const link = await screen.findByRole('link', { name: 'Give those a category' });
+    expect(link).toHaveAttribute(
+      'href',
+      '/transactions?type=EXPENSE&categoryId=none&from=2026-03-01&to=2026-03-31',
+    );
+  });
+
+  /** Nothing to report is not a figure worth a line of its own. */
+  it('says nothing when every pound spent is inside a budget', async () => {
+    arrange(
+      budgetMonth({
+        rows: [RENT],
+        totalLimitEgp: '1800.0000',
+        totalSpentEgp: '100.0000',
+        totalRemainingEgp: '1700.0000',
+      }),
+    );
+    render(<Harness />);
+
+    await findLimitFor('Rent');
+    expect(screen.queryByText(/outside these budgets/)).toBeNull();
+  });
+
+  /**
+   * Unbudgeted is not the same as uncategorised: spending in a category with no limit is
+   * already labelled, so there is nothing to go and fix and no link to offer.
+   */
+  it('drops the link when the spending already has categories', async () => {
+    arrange(
+      budgetMonth({
+        rows: [RENT],
+        totalLimitEgp: '1800.0000',
+        totalSpentEgp: '100.0000',
+        totalRemainingEgp: '1700.0000',
+        unbudgetedSpentEgp: '2500.0000',
+        uncategorisedSpentEgp: '0.0000',
+      }),
+    );
+    render(<Harness />);
+
+    expect(await screen.findByText(/2,500\.00 EGP/)).toBeInTheDocument();
+    expect(screen.queryByText(/with no category at all/)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Give those a category' })).toBeNull();
   });
 });
 

@@ -135,6 +135,161 @@ describe('the month view', () => {
   });
 });
 
+/**
+ * `totalSpentEgp` covers budgeted categories only. That is the right figure to hold against
+ * a limit and the wrong one to read as "what I spent this month" — and on a real ledger the
+ * gap is not small. With one budget set and everything else uncategorised, the page read
+ * "spent 100, 1,700 left" while nine thousand pounds had gone out. Both figures true, one
+ * screen misleading.
+ */
+describe('what the budgets cannot see', () => {
+  it('reports spending in a category that has no limit', async () => {
+    await withRollback(async (tx) => {
+      const { account, rent, food } = await setup(tx);
+      await putBudgets(tx, '2026-08', [{ categoryId: rent.id, limitEgp: '5000' }]);
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '1000',
+        accountId: account.id,
+        categoryId: rent.id,
+        date: IN_AUGUST,
+        note: null,
+      });
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '2500',
+        accountId: account.id,
+        categoryId: food.id,
+        date: IN_AUGUST,
+        note: null,
+      });
+
+      const month = await getBudgetMonth(tx, '2026-08');
+
+      expect(month.totalSpentEgp).toBe('1000.0000');
+      expect(month.unbudgetedSpentEgp).toBe('2500.0000');
+      // Food has a category, just no limit — nothing to act on, so nothing to name here.
+      expect(month.uncategorisedSpentEgp).toBe('0.0000');
+    });
+  });
+
+  it('names uncategorised spending separately, as the part you can act on', async () => {
+    await withRollback(async (tx) => {
+      const { account, rent } = await setup(tx);
+      await putBudgets(tx, '2026-08', [{ categoryId: rent.id, limitEgp: '5000' }]);
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '100',
+        accountId: account.id,
+        categoryId: rent.id,
+        date: IN_AUGUST,
+        note: null,
+      });
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '9323.84',
+        accountId: account.id,
+        categoryId: null,
+        date: IN_AUGUST,
+        note: null,
+      });
+
+      const month = await getBudgetMonth(tx, '2026-08');
+
+      expect(month.totalSpentEgp).toBe('100.0000');
+      expect(month.totalRemainingEgp).toBe('4900.0000');
+      expect(month.unbudgetedSpentEgp).toBe('9323.8400');
+      expect(month.uncategorisedSpentEgp).toBe('9323.8400');
+    });
+  });
+
+  it('is zero when every pound spent sits in a budgeted category', async () => {
+    await withRollback(async (tx) => {
+      const { account, rent } = await setup(tx);
+      await putBudgets(tx, '2026-08', [{ categoryId: rent.id, limitEgp: '5000' }]);
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '4000',
+        accountId: account.id,
+        categoryId: rent.id,
+        date: IN_AUGUST,
+        note: null,
+      });
+
+      const month = await getBudgetMonth(tx, '2026-08');
+
+      expect(month.unbudgetedSpentEgp).toBe('0.0000');
+      expect(month.uncategorisedSpentEgp).toBe('0.0000');
+    });
+  });
+
+  /** Income is not spending, and a transfer is not spending either (D2). */
+  it('counts only expenses', async () => {
+    await withRollback(async (tx) => {
+      const { account } = await setup(tx);
+
+      await createTransaction(tx, {
+        type: 'INCOME',
+        amount: '8860',
+        accountId: account.id,
+        categoryId: null,
+        date: IN_AUGUST,
+        note: null,
+      });
+
+      const month = await getBudgetMonth(tx, '2026-08');
+      expect(month.unbudgetedSpentEgp).toBe('0.0000');
+    });
+  });
+
+  /**
+   * An archived category keeps its history but no longer appears as a row, so its spending
+   * has nowhere above to be counted. Reading it out of the same grouped query rather than
+   * from the rows is what stops it vanishing from the page entirely.
+   */
+  it('still counts spending in a category that has since been archived', async () => {
+    await withRollback(async (tx) => {
+      const { account, food } = await setup(tx);
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '750',
+        accountId: account.id,
+        categoryId: food.id,
+        date: IN_AUGUST,
+        note: null,
+      });
+      await tx.category.update({ where: { id: food.id }, data: { isArchived: true } });
+
+      const month = await getBudgetMonth(tx, '2026-08');
+
+      expect(month.rows.map((row) => row.categoryName)).not.toContain('Food');
+      expect(month.unbudgetedSpentEgp).toBe('750.0000');
+    });
+  });
+
+  it('reports the month asked for, not the one with the spending in it', async () => {
+    await withRollback(async (tx) => {
+      const { account } = await setup(tx);
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '500',
+        accountId: account.id,
+        categoryId: null,
+        date: IN_AUGUST,
+        note: null,
+      });
+
+      expect((await getBudgetMonth(tx, '2026-07')).unbudgetedSpentEgp).toBe('0.0000');
+      expect((await getBudgetMonth(tx, '2026-08')).unbudgetedSpentEgp).toBe('500.0000');
+    });
+  });
+});
+
 describe('setting limits', () => {
   it('clears a budget rather than storing zero', async () => {
     await withRollback(async (tx) => {

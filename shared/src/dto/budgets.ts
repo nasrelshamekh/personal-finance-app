@@ -29,6 +29,18 @@ export interface BudgetMonthDto {
   totalLimitEgp: string;
   totalSpentEgp: string;
   totalRemainingEgp: string;
+  /**
+   * What the totals above cannot see: spending in the month that falls outside every
+   * budgeted category, either because its category has no limit or because it has no
+   * category at all.
+   *
+   * Without it the screen is quietly reassuring on a real ledger — "spent 100, 1,700
+   * left" is true of the budgets and false of the month, and early on the uncategorised
+   * pile is usually the larger figure by an order of magnitude.
+   */
+  unbudgetedSpentEgp: string;
+  /** The part of `unbudgetedSpentEgp` with no category at all, and the actionable part. */
+  uncategorisedSpentEgp: string;
 }
 
 export const budgetMonthQuerySchema = z.object({

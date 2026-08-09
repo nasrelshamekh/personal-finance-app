@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ArrowLeft, ArrowRight, Coins, Copy } from 'lucide-react';
-import { formatAmount, type BudgetRowDto } from '@ledger/shared';
+import { formatAmount, UNCATEGORISED, type BudgetRowDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { monthDayRange, shiftMonth, useMonth } from '@/hooks/useMonth';
 import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -11,17 +13,6 @@ import { ProgressBar } from '@/components/shared/Progress';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBudgetMonth, useCopyBudgets, usePutBudgets } from './queries';
-
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
-function shiftMonth(month: string, delta: number): string {
-  const [year, index] = month.split('-').map(Number);
-  const date = new Date(Date.UTC(year ?? 2026, (index ?? 1) - 1 + delta, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 function BudgetRow({
   row,
@@ -95,7 +86,7 @@ function BudgetRow({
 }
 
 export function BudgetsPage() {
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonth] = useMonth();
   const { data, isPending } = useBudgetMonth(month);
   const save = usePutBudgets();
   const copy = useCopyBudgets();
@@ -205,6 +196,41 @@ export function BudgetsPage() {
               </div>
             </article>
           </div>
+
+          {/*
+            The three figures above describe the budgets, not the month, and on a real
+            ledger those are wildly different numbers — "spent 100, 1,700 left" while
+            nine thousand went out the door uncategorised. Stated in full rather than
+            folded into the totals: money you did not budget for is not money you
+            overspent, but it is money you spent, and the page has to say so.
+          */}
+          {Number.parseFloat(data.unbudgetedSpentEgp) > 0 && (
+            <p className="mb-3 rounded-md border border-border bg-card/40 px-3 py-2 text-sm text-muted-foreground">
+              A further{' '}
+              <span className="font-numeric tabular-nums text-foreground">
+                {formatAmount(data.unbudgetedSpentEgp)} EGP
+              </span>{' '}
+              went out this month outside these budgets
+              {Number.parseFloat(data.uncategorisedSpentEgp) > 0 && (
+                <>
+                  {' — '}
+                  <span className="font-numeric tabular-nums text-foreground">
+                    {formatAmount(data.uncategorisedSpentEgp)}
+                  </span>{' '}
+                  of it with no category at all
+                </>
+              )}
+              .{' '}
+              {Number.parseFloat(data.uncategorisedSpentEgp) > 0 && (
+                <Link
+                  to={`/transactions?type=EXPENSE&categoryId=${UNCATEGORISED}&from=${monthDayRange(month).from}&to=${monthDayRange(month).to}`}
+                  className="underline underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Give those a category
+                </Link>
+              )}
+            </p>
+          )}
 
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <button

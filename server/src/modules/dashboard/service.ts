@@ -15,7 +15,6 @@ import {
 import { abs, add, div, mul, sub, sum, toStorageString } from '../../lib/money';
 import { getRatesToBase, type Db } from '../../lib/fx';
 import { ensureFreshRates } from '../fx/service';
-import { listAccounts } from '../accounts/service';
 import { transactionInclude, transactionsToDtos } from '../transactions/service';
 
 /** Half-open range `[start, end)`, so a transaction at 23:59:59.999 is never lost. */
@@ -228,6 +227,55 @@ async function buildDaily(db: Db, range: MonthRange): Promise<DailySpendDto[]> {
   return days;
 }
 
+/**
+ * The accounts as they stood at the end of the month being read, not as they stand now.
+ *
+ * Deliberately the same two terms as `netWorthAt`, and in the same order: an account that
+ * did not exist yet is excluded, and every movement after the month is ignored. That is
+ * what makes the panel add up to the net-worth figure printed above it. Reading July and
+ * being shown today's balances next to a net worth of zero was the bug — three panels
+ * describing three different moments, each of them individually correct.
+ */
+async function buildAccounts(db: Db, range: MonthRange): Promise<AccountSummaryDto[]> {
+  const accounts = await db.account.findMany({
+    where: { isArchived: false, openingDate: { lt: range.end } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (accounts.length === 0) return [];
+
+  const movements = await db.transaction.groupBy({
+    by: ['accountId'],
+    where: { accountId: { in: accounts.map((account) => account.id) }, date: { lt: range.end } },
+    _sum: { amount: true, amountEgp: true },
+  });
+
+  const byAccount = new Map(
+    movements.map((row) => [
+      row.accountId,
+      {
+        amount: row._sum.amount?.toString() ?? '0',
+        amountEgp: row._sum.amountEgp?.toString() ?? '0',
+      },
+    ]),
+  );
+
+  return accounts.map((account) => {
+    const moved = byAccount.get(account.id) ?? { amount: '0', amountEgp: '0' };
+
+    return {
+      id: account.id,
+      name: account.name,
+      currency: account.currency,
+      color: account.color,
+      icon: account.icon,
+      // A plain sum: amounts carry their own sign (SPEC §4.7).
+      balance: toStorageString(add(account.openingBalance.toString(), moved.amount)),
+      balanceEgp: toStorageString(add(account.openingBalanceEgp.toString(), moved.amountEgp)),
+    };
+  });
+}
+
 async function buildDebtsDueSoon(db: Db, now: Date): Promise<DebtDueDto[]> {
   const horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -301,27 +349,21 @@ export async function getDashboard(
       buildTotals(db, range),
       buildSpendByCategory(db, range),
       buildDaily(db, range),
-      listAccounts(db, false),
+      buildAccounts(db, range),
       buildDebtsDueSoon(db, now),
       buildSavings(db),
       getRatesToBase(db, FOREIGN_CURRENCIES, now),
     ]);
 
+  // Scoped to the month like everything else on the screen. Unscoped, reading July listed
+  // August's rows under a July heading — and "recent" under a month picker can only
+  // sensibly mean recent *in that month*.
   const recentRows = await db.transaction.findMany({
+    where: { date: { gte: range.start, lt: range.end } },
     include: transactionInclude,
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     take: 6,
   });
-
-  const accountSummaries: AccountSummaryDto[] = accounts.map((account) => ({
-    id: account.id,
-    name: account.name,
-    currency: account.currency,
-    color: account.color,
-    icon: account.icon,
-    balance: account.balance,
-    balanceEgp: account.balanceEgp,
-  }));
 
   return {
     month: range.key,
@@ -330,7 +372,7 @@ export async function getDashboard(
     spendByCategory,
     daily,
     recentTransactions: await transactionsToDtos(db, recentRows),
-    accounts: accountSummaries,
+    accounts,
     debtsDueSoon,
     savingsGoals,
     rates: rates.map((rate) => ({

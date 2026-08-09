@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DebtDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
@@ -25,11 +26,6 @@ import { useAccountList } from '@/features/accounts/queries';
 import { useAddDebtPayment } from './queries';
 
 const NO_ACCOUNT = 'none';
-
-function todayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
 
 interface PaymentSheetProps {
   debt: DebtDto | undefined;

@@ -7,6 +7,7 @@ import {
   type Currency,
 } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
@@ -80,7 +81,7 @@ export function AccountSheet({ open, onOpenChange, editing }: AccountSheetProps)
     setType('CASH');
     setCurrency('EGP');
     setOpeningBalance('0');
-    setOpeningDate(new Date().toISOString().slice(0, 10));
+    setOpeningDate(todayIso());
     setColor(SWATCHES[0] ?? '#2f8f5b');
   }, [open, editing]);
 

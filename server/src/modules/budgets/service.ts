@@ -84,12 +84,32 @@ export async function getBudgetMonth(db: Db, month?: string): Promise<BudgetMont
   const totalLimit = sum(budgeted.map((row) => row.limitEgp ?? '0'));
   const totalSpent = sum(budgeted.map((row) => row.spentEgp));
 
+  /*
+   * Everything the totals above cannot see.
+   *
+   * `totalSpent` covers budgeted categories only, which is the right figure to compare
+   * against a limit and the wrong one to read as "what I spent this month". On a real
+   * ledger the gap is not a rounding detail: uncategorised is usually the biggest bucket
+   * for months, so a page reporting only the budgeted part reassures you about a fraction
+   * of the money. Reported rather than folded in — a budget you did not set is not a
+   * budget you broke.
+   *
+   * Taken from the same `spendRows`, so it also picks up spending in an archived
+   * category, which has no row above to belong to.
+   */
+  const monthSpent = sum(spendRows.map((row) => abs(row._sum.amountEgp?.toString() ?? '0')));
+  const uncategorised = abs(
+    spendRows.find((row) => row.categoryId === null)?._sum.amountEgp?.toString() ?? '0',
+  );
+
   return {
     month: key,
     rows,
     totalLimitEgp: toStorageString(totalLimit),
     totalSpentEgp: toStorageString(totalSpent),
     totalRemainingEgp: toStorageString(sub(totalLimit, totalSpent)),
+    unbudgetedSpentEgp: toStorageString(sub(monthSpent, totalSpent)),
+    uncategorisedSpentEgp: toStorageString(uncategorised),
   };
 }
 
