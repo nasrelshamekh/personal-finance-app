@@ -64,6 +64,27 @@ if (typeof Blob.prototype.text !== 'function') {
 }
 
 /**
+ * The environment is two halves: jsdom supplies `AbortSignal`, node supplies `fetch` and
+ * `Request`. React Router's data router builds a `Request` for **every** client-side
+ * navigation and hands it a signal from jsdom's `AbortController` — which undici rejects
+ * outright with `Expected signal to be an instance of AbortSignal`, because it brand-checks
+ * against node's class. The navigation then dies in a promise nobody awaits, so the run
+ * reports an unhandled rejection while the assertions look fine.
+ *
+ * The signal is dropped rather than translated: it exists to abort in-flight loaders, and
+ * this app has none — every route renders and fetches through TanStack Query.
+ */
+const UndiciRequest = globalThis.Request;
+
+class RequestWithoutForeignSignal extends UndiciRequest {
+  constructor(input: RequestInfo | URL, init?: RequestInit) {
+    super(input, init === undefined ? undefined : { ...init, signal: null });
+  }
+}
+
+globalThis.Request = RequestWithoutForeignSignal;
+
+/**
  * Radix's Select drives its listbox with pointer capture and scrolls the active option
  * into view. jsdom implements none of these — without them, opening a `<Select>` throws
  * `target.hasPointerCapture is not a function` before the options ever render.

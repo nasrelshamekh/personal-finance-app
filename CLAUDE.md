@@ -346,8 +346,8 @@ client` runs anywhere in about a second.
 as source, so restating them would be a third place for the same path to drift. The react
 plugin comes along with it, which is what compiles JSX in a test file.
 
-`src/test/setup.ts` runs first and does three things, all of which a component test fails
-without:
+`src/test/setup.ts` runs first and papers over the gaps between jsdom and node, all of
+which a component test fails without:
 
 - registers `afterEach(cleanup)` — Testing Library auto-cleans only when vitest globals
   are on, and they are off here to match the other workspaces, so without it the previous
@@ -355,7 +355,16 @@ without:
 - stubs `window.matchMedia`, which jsdom does not implement at all — `ThemeProvider` and
   `useMediaQuery` both call it during render;
 - stubs `ResizeObserver` for Radix and recharts, which measure and throw rather than
-  degrade.
+  degrade;
+- polyfills `Blob.prototype.text` via `FileReader`, and Radix's pointer-capture and
+  `scrollIntoView`, which jsdom lacks entirely;
+- wraps `Request` so it drops a foreign `signal`. **The environment is two halves**: jsdom
+  supplies `AbortSignal`, node supplies `fetch`/`Request`, and undici brand-checks the
+  signal against *its* class. React Router's data router builds a `Request` for every
+  client-side navigation, so without this any `createMemoryRouter` test that navigates
+  dies in an unhandled rejection while its assertions still look green. Dropping the
+  signal is safe here because no route has a loader — everything fetches through TanStack
+  Query.
 
 **A test that cannot fail is worth nothing.** Both suites here were checked by breaking the
 code on purpose — `MAX_VISIBLE` 3 → 5 and `toFixed(2)` → `toFixed(4)` — and confirming the
@@ -377,6 +386,19 @@ operation of the calculator works fully* — could not be closed from the browse
 The calculator test needs a router (`sendToTransaction` navigates) and a `QueryClient`
 (the pad's currency mode calls `useConvert`), and it clears `localStorage` around every
 case because the tape persists there.
+
+**A `ready()` helper must wait for a state the component could not already be in.** Every
+flake found so far has been the same mistake: waiting for the *request* rather than for
+its effect, or for "some text" in a control whose empty state also has text. `PaymentSheet`
+and `ContributionSheet` default their account from the fetched list, and their triggers
+read "Don't record a transaction" from the first paint — so `toHaveTextContent(/\w/)`
+passed instantly and the test asserted mid-flight. Both now name the account they expect;
+where the expected state *is* the initial one, the test opens the dropdown instead, because
+finding a fetched option in the list is proof the data arrived.
+
+Run a new file against the whole suite several times before believing it. These only fail
+under parallel load, and an exit code of 1 with every assertion green is a real outcome —
+`CountUp`'s orphaned frame did exactly that.
 
 ## House rules
 
