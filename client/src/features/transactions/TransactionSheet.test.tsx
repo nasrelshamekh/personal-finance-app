@@ -78,10 +78,23 @@ function arrange(
   });
 }
 
-/** Waits for the accounts query to land, which is what fills the account defaults. */
+/**
+ * Waits for the accounts to be *applied*, not merely requested.
+ *
+ * Waiting on the request alone was a real flake: the amount field renders immediately, so
+ * `ready()` returned while `accountId` and `toAccountId` were still empty. Switching to
+ * Transfer at that moment leaves both accounts unset, so nothing is cross-currency and the
+ * "Amount arriving" field never appears — which failed roughly one run in four, and only
+ * when the whole suite was running.
+ */
 async function ready() {
   await waitFor(() => expect(api.requestsFor('GET /accounts').length).toBeGreaterThan(0));
   await screen.findByLabelText(/^Amount/);
+  // "Account" when adding, "From account" when the row is a transfer. Anchored so that
+  // "To account" cannot match as well and make the query ambiguous.
+  await waitFor(() =>
+    expect(screen.getByLabelText(/^(Account|From account)$/)).toHaveTextContent(/\w/),
+  );
 }
 
 const submitted = () => api.requestsFor('POST /transactions')[0]?.body;
