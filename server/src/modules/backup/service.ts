@@ -19,7 +19,6 @@ import { inTransaction } from '../../lib/tx';
 import { getSettings, SETTINGS_ID } from '../../lib/settings';
 import { toRateString } from '../../lib/money';
 import { SEED_CATEGORIES, SEED_RATES, SEED_RATES_AS_OF } from '../../lib/seed-data';
-import { env } from '../../env';
 import type { Db } from '../../lib/fx';
 
 /**
@@ -507,10 +506,18 @@ async function writeBackup(tx: Prisma.TransactionClient, data: BackupData): Prom
   });
 }
 
+/**
+ * `backupDir` is required rather than defaulted to `env.BACKUP_DIR`. A default reads as a
+ * convenience and behaves as a trap: a test that forgets it writes a copy of the
+ * developer's real ledger into the repo, silently and with no failing assertion. Required,
+ * the compiler names every call site, and the only one that reaches for the environment is
+ * the router.
+ */
 export async function importBackup(
   db: Db,
   backup: BackupDto,
   dryRun: boolean,
+  backupDir: string,
 ): Promise<ImportReportDto> {
   if (backup.version > BACKUP_VERSION) {
     throw AppError.unprocessable(
@@ -520,6 +527,18 @@ export async function importBackup(
 
   const problems = findProblems(backup.data);
   const approximateRows = findApproximateRows(backup.data);
+
+  /*
+   * An import replaces rather than merges, so applying one destroys the current ledger
+   * exactly as a reset does — and restoring the wrong file is an easier mistake to make
+   * than typing ERASE EVERYTHING by accident. Same copy, same guarantee, same ordering.
+   *
+   * Decided out here rather than inside the transaction because `findProblems` reads only
+   * the incoming data: a dry run and a rejected backup both write nothing, and neither is
+   * worth a file.
+   */
+  const willApply = !dryRun && problems.length === 0;
+  const backupPath = willApply ? await writeSafetyCopy(db, backupDir, 'import') : null;
 
   return inTransaction(db, async (tx) => {
     await getSettings(tx);
@@ -531,22 +550,21 @@ export async function importBackup(
       incoming: countRow(backup.data, table),
     }));
 
-    const shouldApply = !dryRun && problems.length === 0;
-
-    if (shouldApply) {
+    if (willApply) {
       await deleteEverything(tx);
       await writeBackup(tx, backup.data);
     }
 
     return {
       dryRun,
-      applied: shouldApply,
+      applied: willApply,
       exportedAt: backup.exportedAt,
       changes,
       totalExisting: changes.reduce((sum, change) => sum + change.existing, 0),
       totalIncoming: changes.reduce((sum, change) => sum + change.incoming, 0),
       approximateRows,
       problems,
+      backupPath,
     };
   });
 }
@@ -556,12 +574,20 @@ export async function importBackup(
  * holds nothing worth copying.
  *
  * Taken *before* the transaction opens, on purpose. If the copy cannot be written the
- * reset must not happen at all — the guarantee is worth more than the convenience, and a
- * wipe that half-succeeded because the disk was full is the worst of both. The reverse
- * order would leave a stray backup of a database that was never touched, which is
- * harmless; this order leaves data intact, which is not.
+ * destructive step must not happen at all — the guarantee is worth more than the
+ * convenience, and a wipe that half-succeeded because the disk was full is the worst of
+ * both. The reverse order would leave a stray backup of a database that was never
+ * touched, which is harmless; this order leaves data intact, which is not.
+ *
+ * Both callers replace everything, so both take one. The filename says which, because
+ * "the state before I restored the wrong file" and "the state before I wiped it" are
+ * different regrets and you will be reading the directory in a hurry.
  */
-async function writeResetBackup(db: Db, directory: string): Promise<string | null> {
+async function writeSafetyCopy(
+  db: Db,
+  directory: string,
+  reason: 'reset' | 'import',
+): Promise<string | null> {
   const backup = await exportAll(db);
   const rows = BACKUP_TABLES.reduce((sum, table) => sum + backup.data[table].length, 0);
   if (rows === 0) return null;
@@ -572,7 +598,7 @@ async function writeResetBackup(db: Db, directory: string): Promise<string | nul
   const target = path.resolve(REPO_ROOT, directory);
 
   await mkdir(target, { recursive: true });
-  const file = path.join(target, `ledger-eg-before-reset-${stamp}.json`);
+  const file = path.join(target, `ledger-eg-before-${reason}-${stamp}.json`);
   await writeFile(file, JSON.stringify(backup, null, 2), 'utf8');
 
   return file;
@@ -581,9 +607,9 @@ async function writeResetBackup(db: Db, directory: string): Promise<string | nul
 export async function resetAll(
   db: Db,
   restoreStarterData: boolean,
-  backupDir: string = env.BACKUP_DIR,
+  backupDir: string,
 ): Promise<ResetReportDto> {
-  const backupPath = await writeResetBackup(db, backupDir);
+  const backupPath = await writeSafetyCopy(db, backupDir, 'reset');
 
   return inTransaction(db, async (tx) => {
     await getSettings(tx);

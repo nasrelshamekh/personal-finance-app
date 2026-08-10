@@ -207,7 +207,8 @@ function ImportCard() {
       <p className="text-sm font-medium text-foreground">Restore from a backup</p>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Pick a file and you get a summary of what would change. Nothing is written until you
-        confirm, and a restore replaces everything rather than merging.
+        confirm, and a restore replaces everything rather than merging — so what is here now is
+        saved to disk first, in case the file turns out to be the wrong one.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -257,9 +258,18 @@ function ImportCard() {
       )}
 
       {report?.applied === true && (
-        <p role="status" className="mt-2 text-xs text-money-positive">
-          Restored. Every screen is now reading the backup.
-        </p>
+        <div role="status" className="mt-2 space-y-1">
+          <p className="text-xs text-money-positive">
+            Restored. Every screen is now reading the backup.
+          </p>
+          {/* The way back from restoring the wrong file, named rather than promised. */}
+          {report.backupPath !== null && (
+            <p className="text-xs text-muted-foreground">
+              What was here before was saved to{' '}
+              <span className="break-all font-numeric text-foreground">{report.backupPath}</span>.
+            </p>
+          )}
+        </div>
       )}
 
       {applyError !== null && (

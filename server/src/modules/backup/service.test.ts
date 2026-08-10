@@ -28,6 +28,21 @@ function asTransfer(result: TransactionDto | TransferGroupDto): TransferGroupDto
   return result;
 }
 
+/**
+ * Both a reset and an applied import write a safety copy, so every test points that at a
+ * scratch directory rather than the repo's real `backups/`. Created per test and removed
+ * afterwards, so a test can count the files in it and mean something by the number.
+ */
+let backupDir: string;
+
+beforeEach(async () => {
+  backupDir = await mkdtemp(path.join(tmpdir(), 'ledger-backup-'));
+});
+
+afterEach(async () => {
+  await rm(backupDir, { recursive: true, force: true });
+});
+
 /** A ledger with one of everything the round trip has to preserve. */
 async function seedLedger(tx: Tx) {
   await makeStandardRates(tx);
@@ -105,7 +120,7 @@ describe('import', () => {
         },
       });
 
-      await importBackup(tx, backup, false);
+      await importBackup(tx, backup, false, backupDir);
 
       const after = await tx.transaction.findUniqueOrThrow({ where: { id: expense.id } });
       expect(after.amountEgp.toString()).toBe(before?.amountEgp);
@@ -132,7 +147,7 @@ describe('import', () => {
       const groupId = transfer.transferGroupId;
 
       const backup = await exportAll(tx);
-      await importBackup(tx, backup, false);
+      await importBackup(tx, backup, false, backupDir);
 
       const rows = await tx.transaction.findMany({ where: { transferGroupId: groupId } });
       expect(rows).toHaveLength(2);
@@ -152,7 +167,7 @@ describe('import', () => {
       };
 
       const countBefore = await tx.transaction.count();
-      const report = await importBackup(tx, trimmed, true);
+      const report = await importBackup(tx, trimmed, true, backupDir);
 
       expect(report.dryRun).toBe(true);
       expect(report.applied).toBe(false);
@@ -180,7 +195,7 @@ describe('import', () => {
         }),
       );
 
-      await importBackup(tx, backup, false);
+      await importBackup(tx, backup, false, backupDir);
 
       expect(await tx.transaction.count({ where: { id: afterwards.id } })).toBe(0);
     });
@@ -197,7 +212,7 @@ describe('import', () => {
       };
 
       const countBefore = await tx.transaction.count();
-      const report = await importBackup(tx, orphaned, false);
+      const report = await importBackup(tx, orphaned, false, backupDir);
 
       expect(report.applied).toBe(false);
       expect(report.problems.length).toBeGreaterThan(0);
@@ -222,7 +237,7 @@ describe('import', () => {
         },
       };
 
-      const report = await importBackup(tx, mismatched, false);
+      const report = await importBackup(tx, mismatched, false, backupDir);
 
       expect(report.applied).toBe(false);
       expect(report.problems.join(' ')).toContain('USD');
@@ -246,7 +261,7 @@ describe('import', () => {
         },
       };
 
-      const report = await importBackup(tx, backdated, true);
+      const report = await importBackup(tx, backdated, true, backupDir);
 
       const flagged = report.approximateRows.find((row) => row.id === expense.id);
       expect(flagged).toBeDefined();
@@ -260,7 +275,7 @@ describe('import', () => {
       const backup = await exportAll(tx);
 
       await expect(
-        importBackup(tx, { ...backup, version: BACKUP_VERSION + 1 }, true),
+        importBackup(tx, { ...backup, version: BACKUP_VERSION + 1 }, true, backupDir),
       ).rejects.toMatchObject({ status: 422 });
     });
   });
@@ -277,6 +292,7 @@ describe('import', () => {
           data: { ...backup.data, settings: { ...backup.data.settings, locale: 'ar-EG' } },
         },
         false,
+        backupDir,
       );
 
       const settings = await tx.setting.findUniqueOrThrow({ where: { id: 1 } });
@@ -284,23 +300,86 @@ describe('import', () => {
       expect(settings.locale).toBe('ar-EG');
     });
   });
+
+  /**
+   * An import replaces rather than merges, so applying one destroys the current ledger as
+   * surely as a reset does — and picking the wrong file is the easier mistake of the two.
+   * Same copy, same guarantee.
+   */
+  describe('the safety copy', () => {
+    it('saves what it is about to replace, and says where', async () => {
+      await withRollback(async (tx) => {
+        const { expense } = await seedLedger(tx);
+        const backup = await exportAll(tx);
+
+        // A backup that would wipe the current transactions out.
+        const trimmed: BackupDto = { ...backup, data: { ...backup.data, transactions: [] } };
+        const report = await importBackup(tx, trimmed, false, backupDir);
+
+        expect(report.applied).toBe(true);
+        expect(await tx.transaction.count({ where: { id: expense.id } })).toBe(0);
+
+        expect(report.backupPath).not.toBeNull();
+        const saved = JSON.parse(await readFile(report.backupPath as string, 'utf8')) as BackupDto;
+        expect(saved.data.transactions.some((row) => row.id === expense.id)).toBe(true);
+      });
+    });
+
+    /** Names the file for what it is, because the two regrets read very differently. */
+    it('marks the file as an import rather than a reset', async () => {
+      await withRollback(async (tx) => {
+        await seedLedger(tx);
+        const backup = await exportAll(tx);
+
+        const report = await importBackup(tx, backup, false, backupDir);
+
+        expect(path.basename(report.backupPath as string)).toMatch(/^ledger-eg-before-import-/);
+      });
+    });
+
+    it('writes nothing for a dry run, which changes nothing', async () => {
+      await withRollback(async (tx) => {
+        await seedLedger(tx);
+        const backup = await exportAll(tx);
+
+        const report = await importBackup(tx, backup, true, backupDir);
+
+        expect(report.backupPath).toBeNull();
+        expect(await readdir(backupDir)).toHaveLength(0);
+      });
+    });
+
+    it('writes nothing when the backup is rejected', async () => {
+      await withRollback(async (tx) => {
+        await seedLedger(tx);
+        const backup = await exportAll(tx);
+        const orphaned: BackupDto = { ...backup, data: { ...backup.data, accounts: [] } };
+
+        const report = await importBackup(tx, orphaned, false, backupDir);
+
+        expect(report.applied).toBe(false);
+        expect(report.backupPath).toBeNull();
+        expect(await readdir(backupDir)).toHaveLength(0);
+      });
+    });
+
+    it('refuses to replace anything when the copy cannot be written', async () => {
+      await withRollback(async (tx) => {
+        const { expense } = await seedLedger(tx);
+        const backup = await exportAll(tx);
+        const trimmed: BackupDto = { ...backup, data: { ...backup.data, transactions: [] } };
+
+        const blocked = path.join(backupDir, 'not-a-directory');
+        await writeFile(blocked, 'in the way', 'utf8');
+
+        await expect(importBackup(tx, trimmed, false, blocked)).rejects.toThrow();
+        expect(await tx.transaction.count({ where: { id: expense.id } })).toBe(1);
+      });
+    });
+  });
 });
 
 describe('reset', () => {
-  /**
-   * Every reset writes a safety copy, so the tests point that at a scratch directory
-   * rather than the repo's real `backups/`. Created per test and removed afterwards.
-   */
-  let backupDir: string;
-
-  beforeEach(async () => {
-    backupDir = await mkdtemp(path.join(tmpdir(), 'ledger-reset-'));
-  });
-
-  afterEach(async () => {
-    await rm(backupDir, { recursive: true, force: true });
-  });
-
   it('empties every table and reports what it removed', async () => {
     await withRollback(async (tx) => {
       await seedLedger(tx);
@@ -377,7 +456,7 @@ describe('reset', () => {
         const written = JSON.parse(
           await readFile(report.backupPath as string, 'utf8'),
         ) as BackupDto;
-        const restored = await importBackup(tx, written, false);
+        const restored = await importBackup(tx, written, false, backupDir);
 
         expect(restored.applied).toBe(true);
         expect(restored.problems).toEqual([]);

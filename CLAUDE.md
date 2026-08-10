@@ -335,13 +335,19 @@ whole database.
   categories cannot record an expense, so a bare wipe leaves the app unusable, not fresh.
   **Reset restores categories and rates but never accounts**, which is also the fingerprint
   that tells a reset apart from a re-seed after the fact: `db:seed` creates two accounts.
-- **A reset writes a full export to `BACKUP_DIR` first, and refuses to run if it cannot.**
-  Taken *before* the transaction opens: a wipe that half-succeeded because the disk was
-  full is the worst of both outcomes, and the guarantee is worth more than the convenience.
-  The path comes back in the report and is shown in Settings — a backup you cannot find is
-  not a backup. Nothing is written when the database is already empty. `backups/` is
-  gitignored: those files hold real financial data. Tests must pass a scratch directory as
-  the third argument rather than writing into the repo.
+- **A reset and an applied import both write a full export to `BACKUP_DIR` first, and
+  refuse to run if they cannot.** Taken *before* the transaction opens: a wipe that
+  half-succeeded because the disk was full is the worst of both outcomes, and the guarantee
+  is worth more than the convenience. The filename says which — `before-reset` or
+  `before-import` — because "I restored the wrong file" and "I wiped it" are different
+  regrets. Nothing is written for a dry run, for a backup the checks rejected, or when the
+  database is already empty. The path comes back in the report and is shown in Settings: a
+  backup you cannot find is not a backup.
+- `backups/` is gitignored, because those files hold real financial data. **`backupDir` is
+  a required argument, deliberately not defaulted to `env.BACKUP_DIR`** — a default reads
+  as a convenience and behaves as a trap. One test forgot it and quietly wrote a copy of
+  the developer's ledger into the repo, with nothing failing to say so. Required, the
+  compiler names every call site, and only the router reaches for the environment.
 
 ## Testing
 

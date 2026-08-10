@@ -304,6 +304,42 @@ describe('restoring from a backup', () => {
     expect(api.requestsFor('POST /import')[1]?.body).toMatchObject({ dryRun: false });
   });
 
+  /**
+   * A restore replaces everything, so the ledger it replaced is saved first — and picking
+   * the wrong file is an easier mistake than typing ERASE EVERYTHING by accident.
+   */
+  it('names where the replaced ledger was saved', async () => {
+    const user = userEvent.setup();
+    api.setRoute('POST /import', {
+      body: {
+        dryRun: false,
+        applied: true,
+        exportedAt: '2026-08-06T00:00:00.000Z',
+        changes: [],
+        totalExisting: 8,
+        totalIncoming: 3,
+        approximateRows: [],
+        problems: [],
+        backupPath: 'C:\\Personal Finance App\\backups\\ledger-eg-before-import-2026-08-10.json',
+      },
+    });
+    render(<Harness />);
+
+    await user.upload(await screen.findByLabelText('Choose a backup file'), file(validBackup));
+    await user.click(
+      await screen.findByRole('button', { name: 'Replace everything with this backup' }),
+    );
+
+    expect(await screen.findByText(/What was here before was saved to/)).toBeInTheDocument();
+    expect(screen.getByText(/ledger-eg-before-import-2026-08-10\.json/)).toBeInTheDocument();
+  });
+
+  it('says the copy is taken before you commit, not only afterwards', async () => {
+    render(<Harness />);
+
+    expect(await screen.findByText(/what is here now is saved to disk first/i)).toBeInTheDocument();
+  });
+
   it('refuses to offer the replace when the dry run found problems', async () => {
     const user = userEvent.setup();
     api.setRoute('POST /import', {

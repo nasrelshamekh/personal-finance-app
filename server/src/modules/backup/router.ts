@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { ImportRequest, ResetRequest } from '@ledger/shared';
 import { prisma } from '../../prisma';
+import { env } from '../../env';
 import { validate } from '../../middleware/validate';
 import { importRequestSchema, resetRequestSchema } from './schema';
 import { exportAll, importBackup, resetAll } from './service';
@@ -23,7 +24,7 @@ backupRouter.get('/export', async (_req, res) => {
 
 backupRouter.post('/import', validate({ body: importRequestSchema }), async (req, res) => {
   const { backup, dryRun } = req.body as ImportRequest;
-  const report = await importBackup(prisma, backup, dryRun);
+  const report = await importBackup(prisma, backup, dryRun, env.BACKUP_DIR);
 
   // A dry run that found problems is a successful inspection, not a failed import — the
   // report is the answer, so it is a 200 either way and `applied` says what happened.
@@ -32,5 +33,5 @@ backupRouter.post('/import', validate({ body: importRequestSchema }), async (req
 
 backupRouter.post('/reset', validate({ body: resetRequestSchema }), async (req, res) => {
   const { restoreStarterData } = req.body as ResetRequest;
-  res.json(await resetAll(prisma, restoreStarterData));
+  res.json(await resetAll(prisma, restoreStarterData, env.BACKUP_DIR));
 });

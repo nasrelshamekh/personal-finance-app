@@ -252,6 +252,14 @@ export interface ImportReportDto {
    * backup does not contain, and the like. Non-empty means nothing was written.
    */
   problems: string[];
+  /**
+   * Where the ledger that this import replaced was saved, or null when nothing was
+   * replaced — a dry run, a rejected backup, or an already-empty database.
+   *
+   * An import replaces rather than merges, so applying one is as destructive as a reset,
+   * and restoring the wrong file is the easier mistake of the two to make.
+   */
+  backupPath: string | null;
 }
 
 /** The typed confirmation guarding a wipe (SPEC §9). Compared exactly, case included. */
