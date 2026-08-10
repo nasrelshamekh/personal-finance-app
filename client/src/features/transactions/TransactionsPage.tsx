@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { Plus, Receipt, Trash2, TriangleAlert } from 'lucide-react';
-import type { TransactionDto } from '@ledger/shared';
+import { formatAmount, type CategoryKind, type TransactionDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { ApiError } from '@/lib/api';
 import { reportFailureNow } from '@/lib/action-feedback';
@@ -68,17 +68,41 @@ function ApproximateMark({ transaction }: { transaction: TransactionDto }) {
   );
 }
 
-function Description({ transaction }: { transaction: TransactionDto }) {
-  if (transaction.type !== 'TRANSFER') {
-    return (
-      <span className="text-sm text-foreground">
-        {transaction.category?.name ?? <span className="text-muted-foreground">Uncategorised</span>}
-      </span>
-    );
-  }
+const TYPE_WORD: Record<'INCOME' | 'EXPENSE', string> = {
+  INCOME: 'Income',
+  EXPENSE: 'Expense',
+};
 
+/**
+ * What a row calls itself, in one place so the table and the card list cannot drift.
+ *
+ * The note leads when there is one. It used to sit underneath the category, which read
+ * fine on a tidy ledger and badly on a real one: a category is a *classification* shared
+ * by dozens of rows, while the note is the only thing that says which row this is. On the
+ * ledger this was found with, seven of eight rows carried neither, so the whole column
+ * read "Uncategorised" eight times over.
+ *
+ * A row with neither still cannot be identified — nothing was recorded to identify it with,
+ * and inventing something would be worse. What it can do is say what it *is* rather than
+ * only what it lacks, and keep the missing category visible, because that is the thing
+ * worth fixing.
+ */
+function describe(transaction: TransactionDto): { primary: string; secondary: string | null } {
+  const note = transaction.note?.trim() ?? '';
+  const category = transaction.category?.name ?? null;
+
+  if (note !== '') return { primary: note, secondary: category ?? 'Uncategorised' };
+  if (category !== null) return { primary: category, secondary: null };
+  return {
+    primary: TYPE_WORD[transaction.type === 'INCOME' ? 'INCOME' : 'EXPENSE'],
+    secondary: 'Uncategorised',
+  };
+}
+
+/** "Transfer to Bank (USD)" — the counterpart is the informative half, so it is emphasised. */
+function TransferLine({ transaction }: { transaction: TransactionDto }) {
   return (
-    <span className="text-sm text-muted-foreground">
+    <>
       Transfer
       {transaction.transferCounterpart && (
         <>
@@ -87,8 +111,64 @@ function Description({ transaction }: { transaction: TransactionDto }) {
           <span className="text-foreground">{transaction.transferCounterpart.accountName}</span>
         </>
       )}
-    </span>
+    </>
   );
+}
+
+function Description({ transaction }: { transaction: TransactionDto }) {
+  const note = transaction.note?.trim() ?? '';
+
+  // A transfer has no category, so its second line is where it went rather than what it was.
+  if (transaction.type === 'TRANSFER') {
+    if (note === '') {
+      return (
+        <span className="block truncate text-sm text-muted-foreground">
+          <TransferLine transaction={transaction} />
+        </span>
+      );
+    }
+
+    return (
+      <>
+        <span className="block truncate text-sm text-foreground">{note}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          <TransferLine transaction={transaction} />
+        </span>
+      </>
+    );
+  }
+
+  const { primary, secondary } = describe(transaction);
+
+  return (
+    <>
+      <span className="block truncate text-sm text-foreground">{primary}</span>
+      {secondary !== null && (
+        <span className="block truncate text-xs text-muted-foreground">{secondary}</span>
+      )}
+    </>
+  );
+}
+
+/**
+ * What a screen reader hears when it reaches a row's checkbox.
+ *
+ * The date alone is not a name: five rows on the same day gave five identical
+ * "Select transaction on 4 Aug 2026", which is no better than none. The figure is what
+ * actually tells them apart.
+ */
+function selectionLabel(transaction: TransactionDto): string {
+  const note = transaction.note?.trim() ?? '';
+  const what =
+    transaction.type === 'TRANSFER'
+      ? note === ''
+        ? 'Transfer'
+        : note
+      : describe(transaction).primary;
+
+  return `Select ${what}, ${formatAmount(transaction.amount)} ${transaction.currency}, ${
+    transaction.account.name
+  }, ${format(parseISO(transaction.date), 'd MMM yyyy')}`;
 }
 
 /** Original amount is the hero; the pound equivalent sits under it (SPEC §9). */
@@ -227,6 +307,39 @@ export function TransactionsPage() {
   const rows = useMemo(() => data?.data ?? [], [data]);
   const meta = data?.meta;
 
+  /**
+   * Which kinds of category the selection can legally take.
+   *
+   * The dropdown used to list all fourteen categories alphabetically, so "Freelance" and
+   * "Salary" sat between "Eating out" and "Gifts" with nothing to say which applied. The
+   * server rejects an income category on an expense, so picking one for a mixed selection
+   * was an offer that could only half-work. A selection spanning both kinds has no valid
+   * answer at all, and saying so beats letting you find out one row at a time.
+   */
+  const selectionKinds = useMemo(() => {
+    const kinds = new Set<CategoryKind>();
+    for (const row of rows) {
+      if (!selected.has(row.id) || row.type === 'TRANSFER') continue;
+      kinds.add(row.type === 'INCOME' ? 'INCOME' : 'EXPENSE');
+    }
+    return kinds;
+  }, [rows, selected]);
+
+  const assignableCategories = useMemo(
+    () =>
+      selectionKinds.size === 1
+        ? categories.filter((category) => selectionKinds.has(category.kind))
+        : [],
+    [categories, selectionKinds],
+  );
+
+  const recategoriseBlockedBecause =
+    selectionKinds.size === 0
+      ? 'Transfers have no category'
+      : selectionKinds.size > 1
+        ? 'Income and expenses need separate passes'
+        : null;
+
   const grouped = useMemo(() => {
     const map = new Map<string, TransactionDto[]>();
     for (const row of rows) {
@@ -346,18 +459,22 @@ export function TransactionsPage() {
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-accent/40 px-3 py-2">
           <span className="text-sm font-medium">{selected.size} selected</span>
 
-          <Select onValueChange={bulkRecategorise}>
+          <Select onValueChange={bulkRecategorise} disabled={recategoriseBlockedBecause !== null}>
             <SelectTrigger className="h-8 w-48" aria-label="Recategorise selected">
               <SelectValue placeholder="Recategorise…" />
             </SelectTrigger>
             <SelectContent>
-              {categories.map((category) => (
+              {assignableCategories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.depth > 0 ? `↳ ${category.name}` : category.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+
+          {recategoriseBlockedBecause !== null && (
+            <span className="text-xs text-muted-foreground">{recategoriseBlockedBecause}</span>
+          )}
 
           <button
             type="button"
@@ -439,7 +556,7 @@ export function TransactionsPage() {
                       <Checkbox
                         checked={selected.has(row.id)}
                         onCheckedChange={() => toggleOne(row.id)}
-                        aria-label={`Select transaction on ${format(parseISO(row.date), 'd MMM yyyy')}`}
+                        aria-label={selectionLabel(row)}
                       />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 font-numeric text-sm tabular-nums text-muted-foreground">
@@ -449,12 +566,9 @@ export function TransactionsPage() {
                       <button
                         type="button"
                         onClick={() => setEditing(row)}
-                        className="text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="block max-w-[28rem] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <Description transaction={row} />
-                        {row.note !== null && row.note !== '' && (
-                          <span className="block text-xs text-muted-foreground">{row.note}</span>
-                        )}
                       </button>
                     </td>
                     <td className="px-3 py-2.5 text-sm text-muted-foreground">
@@ -486,10 +600,7 @@ export function TransactionsPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <Description transaction={row} />
-                        <p className="truncate text-xs text-muted-foreground">
-                          {row.account.name}
-                          {row.note !== null && row.note !== '' && <> · {row.note}</>}
-                        </p>
+                        <p className="truncate text-xs text-muted-foreground">{row.account.name}</p>
                       </div>
                       <AmountCell transaction={row} />
                     </button>

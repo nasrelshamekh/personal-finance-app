@@ -102,6 +102,13 @@ const rowsShown = () => screen.findAllByText('Gianaclis');
  */
 const table = () => within(screen.getByRole('table'));
 
+/**
+ * The same, but awaits the table first. The list renders skeletons before it renders rows,
+ * so `table().findByText(…)` resolves `getByRole('table')` too early — the *find* is
+ * asynchronous, the `within` around it is not.
+ */
+const tableWhenReady = async () => within(await screen.findByRole('table'));
+
 beforeEach(() => {
   arrange();
 });
@@ -246,16 +253,71 @@ describe('filters written back to the URL', () => {
   });
 });
 
-describe('the rows', () => {
-  it('names a category, and says Uncategorised rather than leaving it blank', async () => {
+/**
+ * What a row calls itself.
+ *
+ * The category used to be the whole description, which reads fine on a tidy ledger and
+ * badly on a real one: a category is shared by dozens of rows, so on a ledger where seven
+ * of eight rows had neither note nor category the column read "Uncategorised" eight times
+ * and nothing told the rows apart.
+ */
+describe('what a row calls itself', () => {
+  it('leads with the note, because that is what says which row this is', async () => {
     arrange();
     render(<Harness />);
 
     await rowsShown();
-    expect(table().getByText('Groceries')).toBeInTheDocument();
-    expect(table().getByText('Uncategorised')).toBeInTheDocument();
+    const row = table().getByText('Gianaclis').closest('button') as HTMLElement;
+
+    // Note first, category under it — not the other way round.
+    expect(within(row).getAllByText(/./)[0]).toHaveTextContent('Gianaclis');
+    expect(within(row).getByText('Groceries')).toBeInTheDocument();
   });
 
+  it('falls back to the category when there is no note', async () => {
+    arrange([
+      transaction({
+        id: 'tx-9',
+        categoryId: GROCERIES.id,
+        category: { id: GROCERIES.id, name: 'Groceries', color: '#b4553f', icon: 'tag' },
+      }),
+    ]);
+    render(<Harness />);
+
+    const shown = await tableWhenReady();
+    expect(shown.getByText('Groceries')).toBeInTheDocument();
+    expect(shown.queryByText('Uncategorised')).toBeNull();
+  });
+
+  /**
+   * A row carrying neither cannot be identified — nothing was recorded to identify it with.
+   * What it can do is say what it *is* rather than only what it lacks, and keep the missing
+   * category visible, because that is the part worth fixing.
+   */
+  it('says what an unlabelled row is, not only what it lacks', async () => {
+    arrange([transaction({ id: 'tx-9', amount: '-100.0000', note: null })]);
+    render(<Harness />);
+
+    const shown = await tableWhenReady();
+    expect(shown.getByText('Expense')).toBeInTheDocument();
+    expect(shown.getByText('Uncategorised')).toBeInTheDocument();
+  });
+
+  /** The case that made this worth changing: two bare rows that used to read identically. */
+  it('tells a bare income from a bare expense', async () => {
+    arrange([
+      transaction({ id: 'tx-9', type: 'INCOME', amount: '6000.0000', note: null }),
+      transaction({ id: 'tx-10', amount: '-1700.0000', note: null }),
+    ]);
+    render(<Harness />);
+
+    const shown = await tableWhenReady();
+    expect(shown.getByText('Income')).toBeInTheDocument();
+    expect(shown.getByText('Expense')).toBeInTheDocument();
+  });
+});
+
+describe('the rows', () => {
   it('calls a transfer a transfer, and names the other side', async () => {
     arrange([
       transaction({
@@ -343,6 +405,124 @@ describe('with nothing to show', () => {
   });
 });
 
+/**
+ * A checkbox has to name what it selects. "Select transaction on 4 Aug 2026" was the label
+ * for every row on that day — five identical names on the real ledger, which is no more
+ * use than no name at all. The figure is what actually tells them apart.
+ */
+describe('selecting a row', () => {
+  it('names the row and its figure, not just the date', async () => {
+    arrange();
+    render(<Harness />);
+    await rowsShown();
+
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Select Gianaclis, -1,674.00 EGP, Cash (EGP), 6 Aug 2026',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('gives two rows on the same day different names', async () => {
+    arrange([
+      transaction({ id: 'tx-9', amount: '-1674.0000', note: null }),
+      transaction({ id: 'tx-10', amount: '-4000.0000', note: null }),
+    ]);
+    render(<Harness />);
+    await (await tableWhenReady()).findByText('-1,674.00');
+
+    const labels = screen
+      .getAllByRole('checkbox')
+      .map((box) => box.getAttribute('aria-label'))
+      .filter((label) => label !== 'Select all rows on this page');
+
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels[0]).toContain('-1,674.00 EGP');
+  });
+});
+
+/**
+ * The dropdown used to list every category alphabetically, so "Freelance" and "Salary" sat
+ * between "Eating out" and "Gifts" with nothing to say which applied. The server rejects an
+ * income category on an expense, so a mixed selection was an offer that could only ever
+ * half-work — and finding that out is a partial write and a count of what failed.
+ */
+describe('recategorising a selection', () => {
+  const SALARY = category({ id: 'cat-salary', name: 'Salary', kind: 'INCOME' });
+
+  const EXPENSE_ROW = transaction({ id: 'tx-1', amount: '-1674.0000', note: 'Gianaclis' });
+  const INCOME_ROW = transaction({
+    id: 'tx-2',
+    type: 'INCOME',
+    amount: '8860.0000',
+    note: null,
+  });
+
+  it('offers only expense categories for a selection of expenses', async () => {
+    const user = userEvent.setup();
+    arrange([EXPENSE_ROW], undefined, undefined, [GROCERIES, SALARY]);
+    render(<Harness />);
+    await rowsShown();
+
+    await user.click(screen.getAllByRole('checkbox')[1] as HTMLElement);
+    await user.click(screen.getByRole('combobox', { name: 'Recategorise selected' }));
+
+    expect(await screen.findByRole('option', { name: 'Groceries' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Salary' })).toBeNull();
+  });
+
+  it('offers only income categories for a selection of income', async () => {
+    const user = userEvent.setup();
+    arrange([INCOME_ROW], undefined, undefined, [GROCERIES, SALARY]);
+    render(<Harness />);
+    await (await tableWhenReady()).findByText('8,860.00');
+
+    await user.click(screen.getAllByRole('checkbox')[1] as HTMLElement);
+    await user.click(screen.getByRole('combobox', { name: 'Recategorise selected' }));
+
+    expect(await screen.findByRole('option', { name: 'Salary' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Groceries' })).toBeNull();
+  });
+
+  /** No single category can be right for both, so the control says so instead of failing. */
+  it('refuses a selection spanning both kinds, and says why', async () => {
+    const user = userEvent.setup();
+    arrange([EXPENSE_ROW, INCOME_ROW], undefined, undefined, [GROCERIES, SALARY]);
+    render(<Harness />);
+    await rowsShown();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }));
+
+    expect(screen.getByRole('combobox', { name: 'Recategorise selected' })).toBeDisabled();
+    expect(screen.getByText('Income and expenses need separate passes')).toBeInTheDocument();
+  });
+
+  it('refuses a selection of transfers, which have no category', async () => {
+    const user = userEvent.setup();
+    arrange(
+      [
+        transaction({
+          id: 'tx-1',
+          type: 'TRANSFER',
+          amount: '-500.0000',
+          note: 'Gianaclis',
+          transferGroupId: 'grp-1',
+        }),
+      ],
+      undefined,
+      undefined,
+      [GROCERIES, SALARY],
+    );
+    render(<Harness />);
+    await rowsShown();
+
+    await user.click(screen.getAllByRole('checkbox')[1] as HTMLElement);
+
+    expect(screen.getByRole('combobox', { name: 'Recategorise selected' })).toBeDisabled();
+    expect(screen.getByText('Transfers have no category')).toBeInTheDocument();
+  });
+});
+
 describe('bulk actions', () => {
   it('selects every row on the page at once', async () => {
     const user = userEvent.setup();
@@ -412,9 +592,15 @@ describe('bulk actions', () => {
     });
   });
 
+  /** Two expenses, because the control no longer lets a mixed selection get this far. */
+  const TWO_EXPENSES: TransactionDto[] = [
+    transaction({ id: 'tx-1', amount: '-1674.0000', note: 'Gianaclis' }),
+    transaction({ id: 'tx-2', amount: '-100.0000', note: null }),
+  ];
+
   it('recategorises the selection', async () => {
     const user = userEvent.setup();
-    arrange();
+    arrange(TWO_EXPENSES);
     render(<Harness />);
     await rowsShown();
 
@@ -428,13 +614,18 @@ describe('bulk actions', () => {
     });
   });
 
-  /** An expense cannot take an income category, so a partial result is the normal outcome. */
+  /**
+   * A row can still be refused one at a time — the category may have been archived since
+   * the page loaded — so the loop reports a count rather than going quiet. It no longer
+   * has to cover the income-category-on-an-expense case, because the dropdown now refuses
+   * to offer that at all.
+   */
   it('counts the rows that kept their category rather than failing silently', async () => {
     const user = userEvent.setup();
-    arrange();
+    arrange(TWO_EXPENSES);
     api.setRoute('PATCH /transactions/tx-2', {
       status: 422,
-      body: { error: { code: 'UNPROCESSABLE', message: 'That category is for expenses.' } },
+      body: { error: { code: 'UNPROCESSABLE', message: 'That category has been archived.' } },
     });
     render(<Harness />);
     await rowsShown();
@@ -446,7 +637,7 @@ describe('bulk actions', () => {
     await waitFor(() => expect(getFailures()).toHaveLength(1));
     expect(getFailures()[0]).toMatchObject({
       headline: 'One transaction kept its category.',
-      detail: 'That category is for expenses.',
+      detail: 'That category has been archived.',
     });
   });
 
