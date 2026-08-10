@@ -46,6 +46,13 @@ const envSchema = z.object({
     ),
 
   FX_API_BASE_URL: z.string().url().default('https://open.er-api.com/v6/latest'),
+
+  /**
+   * Where a reset drops its safety copy before wiping. Relative paths resolve from the
+   * repo root, which is where the server's own `.env` lives, so `backups` means the same
+   * directory whether the process was started from the root or from `server/`.
+   */
+  BACKUP_DIR: z.string().default('backups'),
 });
 
 export type Env = z.infer<typeof envSchema>;

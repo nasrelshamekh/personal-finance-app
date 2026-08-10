@@ -9,3 +9,6 @@ coverage/
 .vite/
 *.tsbuildinfo
 .eslintcache
+
+# Safety copies written before a reset (server/src/modules/backup). Real financial data.
+backups/

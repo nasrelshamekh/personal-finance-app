@@ -298,8 +298,9 @@ function ResetCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">Erase all data</p>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Deletes every account, transaction, debt, goal, budget and rate. This cannot be undone
-            and there is no copy kept — export first if there is any chance you want this back.
+            Deletes every account, transaction, debt, goal, budget and rate. A full copy is written
+            to disk first and its location shown here, so this is recoverable — but only from that
+            file, and only on this machine.
           </p>
 
           <label
@@ -348,10 +349,25 @@ function ResetCard() {
           </button>
 
           {report !== null && (
-            <p role="status" className="mt-2 text-xs text-money-positive">
-              Erased {report.totalDeleted} {report.totalDeleted === 1 ? 'row' : 'rows'}.
-              {report.restoredStarterData && ' The starter categories and rates are back.'}
-            </p>
+            <div role="status" className="mt-2 space-y-1">
+              <p className="text-xs text-money-positive">
+                Erased {report.totalDeleted} {report.totalDeleted === 1 ? 'row' : 'rows'}.
+                {report.restoredStarterData && ' The starter categories and rates are back.'}
+              </p>
+              {/*
+                Named, not merely promised. A copy you cannot find is not a copy, and this
+                is the one moment someone needs to know exactly where it went.
+              */}
+              {report.backupPath !== null && (
+                <p className="text-xs text-muted-foreground">
+                  A copy was saved first, at{' '}
+                  <span className="break-all font-numeric text-foreground">
+                    {report.backupPath}
+                  </span>
+                  . Restore it above with “Choose a file”.
+                </p>
+              )}
+            </div>
           )}
           {error !== null && (
             <p role="alert" className="mt-2 text-xs text-money-negative">

@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { RateSource, type Prisma } from '@prisma/client';
 import {
   BACKUP_FORMAT,
@@ -16,7 +19,15 @@ import { inTransaction } from '../../lib/tx';
 import { getSettings, SETTINGS_ID } from '../../lib/settings';
 import { toRateString } from '../../lib/money';
 import { SEED_CATEGORIES, SEED_RATES, SEED_RATES_AS_OF } from '../../lib/seed-data';
+import { env } from '../../env';
 import type { Db } from '../../lib/fx';
+
+/**
+ * `server/src/modules/backup` → the repo root, so a relative `BACKUP_DIR` means the same
+ * place whether the process was started from the root or from `server/`. Taken from this
+ * file's own location rather than `process.cwd()`, which the caller chooses.
+ */
+const REPO_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../..');
 
 /**
  * Export, import and reset (SPEC §7, §9).
@@ -540,7 +551,40 @@ export async function importBackup(
   });
 }
 
-export async function resetAll(db: Db, restoreStarterData: boolean): Promise<ResetReportDto> {
+/**
+ * Writes a full export to disk and returns where it landed, or null when the database
+ * holds nothing worth copying.
+ *
+ * Taken *before* the transaction opens, on purpose. If the copy cannot be written the
+ * reset must not happen at all — the guarantee is worth more than the convenience, and a
+ * wipe that half-succeeded because the disk was full is the worst of both. The reverse
+ * order would leave a stray backup of a database that was never touched, which is
+ * harmless; this order leaves data intact, which is not.
+ */
+async function writeResetBackup(db: Db, directory: string): Promise<string | null> {
+  const backup = await exportAll(db);
+  const rows = BACKUP_TABLES.reduce((sum, table) => sum + backup.data[table].length, 0);
+  if (rows === 0) return null;
+
+  // Second precision, and the colons a timestamp normally carries are illegal in a
+  // Windows filename.
+  const stamp = backup.exportedAt.slice(0, 19).replace(/[:T]/g, '-');
+  const target = path.resolve(REPO_ROOT, directory);
+
+  await mkdir(target, { recursive: true });
+  const file = path.join(target, `ledger-eg-before-reset-${stamp}.json`);
+  await writeFile(file, JSON.stringify(backup, null, 2), 'utf8');
+
+  return file;
+}
+
+export async function resetAll(
+  db: Db,
+  restoreStarterData: boolean,
+  backupDir: string = env.BACKUP_DIR,
+): Promise<ResetReportDto> {
+  const backupPath = await writeResetBackup(db, backupDir);
+
   return inTransaction(db, async (tx) => {
     await getSettings(tx);
     const deleted = await deleteEverything(tx);
@@ -575,6 +619,7 @@ export async function resetAll(db: Db, restoreStarterData: boolean): Promise<Res
       deleted,
       totalDeleted: Object.values(deleted).reduce((sum, count) => sum + count, 0),
       restoredStarterData: restoreStarterData,
+      backupPath,
     };
   });
 }

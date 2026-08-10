@@ -61,7 +61,13 @@ function arrange(current = settings()) {
     'PUT /settings': current,
     'GET /categories': { data: [] },
     'GET /fx/rates': { rates: [], apiEnabled: true, apiEolAt: null, autoRefresh: 'FRESH' },
-    'POST /reset': { deleted: {}, totalDeleted: 12, restoredStarterData: true },
+    'POST /reset': {
+      deleted: {},
+      totalDeleted: 12,
+      restoredStarterData: true,
+      backupPath:
+        'C:\\Personal Finance App\\backups\\ledger-eg-before-reset-2026-08-10-09-30-00.json',
+    },
   });
 }
 
@@ -392,12 +398,12 @@ describe('erasing everything', () => {
     expect(api.requestsFor('POST /reset')[0]?.body).toMatchObject({ restoreStarterData: false });
   });
 
-  it('warns that there is no copy kept', async () => {
+  /** It used to say the opposite, and the copy has to keep up with the behaviour. */
+  it('says a copy is taken first, and that the file is the only way back', async () => {
     render(<Harness />);
 
-    expect(
-      await screen.findByText(/export first if there is any chance you want this back/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/A full copy is written to disk first/i)).toBeInTheDocument();
+    expect(screen.getByText(/only from that file, and only on this machine/i)).toBeInTheDocument();
   });
 
   it('reports how much it removed', async () => {
@@ -408,5 +414,37 @@ describe('erasing everything', () => {
     await user.click(screen.getByRole('button', { name: 'Erase everything' }));
 
     expect(await screen.findByText(/Erased 12 rows/)).toBeInTheDocument();
+  });
+
+  /** A backup you cannot find is not a backup, so the path is named rather than promised. */
+  it('names the file it saved before wiping', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.type(await screen.findByLabelText(/Type .* to confirm/), RESET_CONFIRMATION);
+    await user.click(screen.getByRole('button', { name: 'Erase everything' }));
+
+    expect(await screen.findByText(/A copy was saved first/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/ledger-eg-before-reset-2026-08-10-09-30-00\.json/),
+    ).toBeInTheDocument();
+  });
+
+  /** An empty ledger has nothing to copy, and a path that is not there must not be claimed. */
+  it('claims no copy when there was nothing to save', async () => {
+    const user = userEvent.setup();
+    api.setRoute('POST /reset', {
+      deleted: {},
+      totalDeleted: 0,
+      restoredStarterData: true,
+      backupPath: null,
+    });
+    render(<Harness />);
+
+    await user.type(await screen.findByLabelText(/Type .* to confirm/), RESET_CONFIRMATION);
+    await user.click(screen.getByRole('button', { name: 'Erase everything' }));
+
+    await screen.findByText(/Erased 0 rows/);
+    expect(screen.queryByText(/A copy was saved first/)).toBeNull();
   });
 });

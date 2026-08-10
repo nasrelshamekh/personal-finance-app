@@ -275,4 +275,12 @@ export interface ResetReportDto {
   deleted: Record<BackupTable, number>;
   totalDeleted: number;
   restoredStarterData: boolean;
+  /**
+   * Where the safety copy was written, or null when there was nothing to copy.
+   *
+   * A reset is the one action in this app that destroys data with no undo, so it takes a
+   * full export first and refuses to proceed if it cannot. Reported back because a backup
+   * you cannot find is not a backup.
+   */
+  backupPath: string | null;
 }

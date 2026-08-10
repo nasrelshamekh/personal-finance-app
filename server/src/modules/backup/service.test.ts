@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   BACKUP_FORMAT,
   BACKUP_VERSION,
@@ -284,13 +287,27 @@ describe('import', () => {
 });
 
 describe('reset', () => {
+  /**
+   * Every reset writes a safety copy, so the tests point that at a scratch directory
+   * rather than the repo's real `backups/`. Created per test and removed afterwards.
+   */
+  let backupDir: string;
+
+  beforeEach(async () => {
+    backupDir = await mkdtemp(path.join(tmpdir(), 'ledger-reset-'));
+  });
+
+  afterEach(async () => {
+    await rm(backupDir, { recursive: true, force: true });
+  });
+
   it('empties every table and reports what it removed', async () => {
     await withRollback(async (tx) => {
       await seedLedger(tx);
       const before = await tx.transaction.count();
       expect(before).toBeGreaterThan(0);
 
-      const report = await resetAll(tx, false);
+      const report = await resetAll(tx, false, backupDir);
 
       expect(report.deleted.transactions).toBe(before);
       expect(report.totalDeleted).toBeGreaterThan(0);
@@ -305,7 +322,7 @@ describe('reset', () => {
     await withRollback(async (tx) => {
       await seedLedger(tx);
 
-      const report = await resetAll(tx, true);
+      const report = await resetAll(tx, true, backupDir);
 
       expect(report.restoredStarterData).toBe(true);
       expect(await tx.category.count()).toBeGreaterThan(0);
@@ -320,11 +337,85 @@ describe('reset', () => {
       await seedLedger(tx);
       await tx.setting.update({ where: { id: 1 }, data: { ratesApiEnabled: false } });
 
-      await resetAll(tx, false);
+      await resetAll(tx, false, backupDir);
 
       const settings = await tx.setting.findUniqueOrThrow({ where: { id: 1 } });
       expect(settings.ratesApiEnabled).toBe(true);
       expect(settings.baseCurrency).toBe('EGP');
+    });
+  });
+
+  /**
+   * The reset is the only action in the app that destroys data with no undo. It takes a
+   * full export first, so "this cannot be undone" stops being true — and reports where the
+   * copy went, because a backup you cannot find is not a backup.
+   */
+  describe('the safety copy', () => {
+    it('writes a full export before wiping, and says where', async () => {
+      await withRollback(async (tx) => {
+        const { expense } = await seedLedger(tx);
+
+        const report = await resetAll(tx, false, backupDir);
+
+        expect(report.backupPath).not.toBeNull();
+        expect(await readdir(backupDir)).toHaveLength(1);
+
+        const written = JSON.parse(
+          await readFile(report.backupPath as string, 'utf8'),
+        ) as BackupDto;
+        expect(written.data.transactions.some((row) => row.id === expense.id)).toBe(true);
+      });
+    });
+
+    /** The copy is the ledger as it stood, so importing it puts everything back. */
+    it('writes something the app will accept back', async () => {
+      await withRollback(async (tx) => {
+        const { expense } = await seedLedger(tx);
+        const report = await resetAll(tx, true, backupDir);
+        expect(await tx.transaction.count()).toBe(0);
+
+        const written = JSON.parse(
+          await readFile(report.backupPath as string, 'utf8'),
+        ) as BackupDto;
+        const restored = await importBackup(tx, written, false);
+
+        expect(restored.applied).toBe(true);
+        expect(restored.problems).toEqual([]);
+        expect(await tx.transaction.count({ where: { id: expense.id } })).toBe(1);
+      });
+    });
+
+    /** Nothing to lose, nothing to write — an empty file is filing-cabinet noise. */
+    it('writes no file when the database is already empty', async () => {
+      await withRollback(async (tx) => {
+        // The first one empties it, and copies whatever was there beforehand.
+        await resetAll(tx, false, backupDir);
+        const afterFirst = (await readdir(backupDir)).length;
+
+        const report = await resetAll(tx, false, backupDir);
+
+        expect(report.backupPath).toBeNull();
+        expect(await readdir(backupDir)).toHaveLength(afterFirst);
+      });
+    });
+
+    /**
+     * The guarantee is worth more than the convenience: if the copy cannot be written, the
+     * wipe must not happen. A reset that half-succeeded because the disk was full would be
+     * the worst of both.
+     */
+    it('refuses to wipe anything when the copy cannot be written', async () => {
+      await withRollback(async (tx) => {
+        await seedLedger(tx);
+        const before = await tx.transaction.count();
+
+        // A file where the directory should be, so creating it fails.
+        const blocked = path.join(backupDir, 'not-a-directory');
+        await writeFile(blocked, 'in the way', 'utf8');
+
+        await expect(resetAll(tx, false, blocked)).rejects.toThrow();
+        expect(await tx.transaction.count()).toBe(before);
+      });
     });
   });
 });
