@@ -182,6 +182,19 @@ and a list of August rows — three panels, three moments, each individually cor
 same order, so the panel adds up to the figure printed above it; a server test asserts
 exactly that. If you add a panel here, scope it or say plainly that it is not scoped.
 
+That invariant also decides what `buildAccounts` filters. **`netWorthAt` counts archived
+accounts**, because archiving is a decision about a list rather than about whose money it
+is — so the panel keeps an archived account while it still holds a balance, marked, and
+drops it once it is empty. Filtering them at the query is what made the two disagree the
+first time.
+
+**"Net worth" is two figures.** `egp` is what the accounts held; `afterDebtsEgp` takes off
+what you owed and adds what you were owed. Both are reported because they answer different
+questions, and the card labels the first *In your accounts* rather than calling it net
+worth. Debt balances are the one place a live rate enters an otherwise frozen figure — a
+debt lives in its own currency (D4) and its remaining balance has no frozen EGP figure to
+read — so `debtsConverted` says when that happened and the UI shows it.
+
 **"Today" is the local date.** `lib/dates.ts` owns it. `toISOString().slice(0, 10)` is the
 UTC date, which in Cairo is still yesterday from 22:00 — the account sheet used that while
 every other sheet used local parts, so late in the evening a new account opened "yesterday"

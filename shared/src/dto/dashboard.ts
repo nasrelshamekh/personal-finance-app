@@ -12,7 +12,7 @@ export const dashboardQuerySchema = z.object({
 export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
 
 export interface NetWorthDto {
-  /** Net worth at the end of the selected month, from frozen figures only (D5). */
+  /** What the accounts held at the end of the selected month, from frozen figures (D5). */
   egp: string;
   /** The same figure at the end of the previous month. */
   previousEgp: string;
@@ -20,6 +20,28 @@ export interface NetWorthDto {
   deltaEgp: string;
   /** Signed, 4dp. Null when the previous month was zero — no percentage exists. */
   deltaPct: string | null;
+
+  /**
+   * What was still owed at the end of the month, both ways, and the figure that results.
+   *
+   * `egp` above is what your accounts held, which is not the same claim as what you are
+   * worth: a ledger with 5,436 in the bank and a 4,000 debt is not a ledger with 5,436.
+   * Both are reported rather than one replacing the other, because they answer different
+   * questions and collapsing them into a single number hides one of the answers.
+   */
+  owedByYouEgp: string;
+  owedToYouEgp: string;
+  /** `egp - owedByYouEgp + owedToYouEgp`. */
+  afterDebtsEgp: string;
+  /**
+   * True when a debt in another currency had to be converted to reach these figures.
+   *
+   * A debt lives in its own currency (D4) and its remaining balance has no frozen EGP
+   * figure, so converting one uses *today's* rate — which means `afterDebtsEgp` mixes a
+   * live rate into an otherwise frozen figure. Flagged rather than hidden; false when
+   * every debt is already in pounds, and then the figure is exact.
+   */
+  debtsConverted: boolean;
 }
 
 export interface MonthTotalsDto {
@@ -62,6 +84,15 @@ export interface AccountSummaryDto {
   icon: string;
   balance: string;
   balanceEgp: string;
+  /**
+   * Archived accounts appear here only while they still hold money.
+   *
+   * Net worth counts every account — archiving is a decision about a list, not about
+   * whose money it is — so hiding one that still holds a balance would make the panel
+   * stop adding up to the figure printed above it. An archived account at zero is left
+   * out, which keeps the panel clean without changing the total.
+   */
+  isArchived: boolean;
 }
 
 export interface DebtDueDto {

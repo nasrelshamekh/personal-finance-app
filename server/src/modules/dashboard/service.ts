@@ -13,7 +13,7 @@ import {
   type SavingsProgressDto,
 } from '@ledger/shared';
 import { abs, add, div, mul, sub, sum, toStorageString } from '../../lib/money';
-import { getRatesToBase, type Db } from '../../lib/fx';
+import { getRate, getRatesToBase, type Db } from '../../lib/fx';
 import { ensureFreshRates } from '../fx/service';
 import { transactionInclude, transactionsToDtos } from '../transactions/service';
 
@@ -67,10 +67,56 @@ async function netWorthAt(db: Db, at: Date): Promise<Decimal> {
   );
 }
 
-async function buildNetWorth(db: Db, range: MonthRange): Promise<NetWorthDto> {
-  const [egp, previousEgp] = await Promise.all([
+/**
+ * What was still owed at the end of the month, in EGP, split by direction.
+ *
+ * Remaining is `principal - payments dated before the month end`, so a past month shows
+ * what was outstanding *then* rather than what is outstanding now. The conversion is the
+ * exception: a debt lives in its own currency (D4) and its remaining balance has no frozen
+ * EGP figure to read, so a foreign debt is converted at today's rate and the caller is told
+ * that happened.
+ *
+ * Only ACTIVE debts count. A debt marked settled is one you have stopped owing, whatever
+ * its payment history says — that button exists for debts squared away outside the app.
+ */
+async function debtsOutstandingAt(
+  db: Db,
+  at: Date,
+  now: Date,
+): Promise<{ owedByYou: Decimal; owedToYou: Decimal; converted: boolean }> {
+  const debts = await db.debt.findMany({
+    where: { status: 'ACTIVE', startDate: { lt: at } },
+    include: { payments: { where: { date: { lt: at } }, select: { amountInDebtCurrency: true } } },
+  });
+
+  let owedByYou = new Decimal(0);
+  let owedToYou = new Decimal(0);
+  let converted = false;
+
+  for (const debt of debts) {
+    const paid = sum(debt.payments.map((payment) => payment.amountInDebtCurrency.toString()));
+    const remaining = sub(debt.principal.toString(), paid);
+    if (remaining.lessThanOrEqualTo(0)) continue;
+
+    let inEgp = remaining;
+    if (debt.currency !== BASE_CURRENCY) {
+      const rate = await getRate(db, debt.currency, BASE_CURRENCY, now);
+      inEgp = mul(remaining, rate.rate);
+      converted = true;
+    }
+
+    if (debt.direction === 'I_OWE') owedByYou = owedByYou.plus(inEgp);
+    else owedToYou = owedToYou.plus(inEgp);
+  }
+
+  return { owedByYou, owedToYou, converted };
+}
+
+async function buildNetWorth(db: Db, range: MonthRange, now: Date): Promise<NetWorthDto> {
+  const [egp, previousEgp, debts] = await Promise.all([
     netWorthAt(db, range.end),
     netWorthAt(db, range.start),
+    debtsOutstandingAt(db, range.end, now),
   ]);
 
   const deltaEgp = sub(egp, previousEgp);
@@ -88,6 +134,10 @@ async function buildNetWorth(db: Db, range: MonthRange): Promise<NetWorthDto> {
     deltaPct: hasMeaningfulBaseline
       ? toStorageString(mul(div(deltaEgp, previousEgp), '100'))
       : null,
+    owedByYouEgp: toStorageString(debts.owedByYou),
+    owedToYouEgp: toStorageString(debts.owedToYou),
+    afterDebtsEgp: toStorageString(egp.minus(debts.owedByYou).plus(debts.owedToYou)),
+    debtsConverted: debts.converted,
   };
 }
 
@@ -237,8 +287,12 @@ async function buildDaily(db: Db, range: MonthRange): Promise<DailySpendDto[]> {
  * describing three different moments, each of them individually correct.
  */
 async function buildAccounts(db: Db, range: MonthRange): Promise<AccountSummaryDto[]> {
+  // Archived ones are included here and dropped below if they hold nothing. `netWorthAt`
+  // counts every account, so filtering them out at the query would make this panel stop
+  // adding up to the figure above it the moment someone archived an account with money
+  // left in it — the same contradiction as reading a past month, wearing a different hat.
   const accounts = await db.account.findMany({
-    where: { isArchived: false, openingDate: { lt: range.end } },
+    where: { openingDate: { lt: range.end } },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -260,20 +314,27 @@ async function buildAccounts(db: Db, range: MonthRange): Promise<AccountSummaryD
     ]),
   );
 
-  return accounts.map((account) => {
-    const moved = byAccount.get(account.id) ?? { amount: '0', amountEgp: '0' };
+  return (
+    accounts
+      .map((account) => {
+        const moved = byAccount.get(account.id) ?? { amount: '0', amountEgp: '0' };
 
-    return {
-      id: account.id,
-      name: account.name,
-      currency: account.currency,
-      color: account.color,
-      icon: account.icon,
-      // A plain sum: amounts carry their own sign (SPEC §4.7).
-      balance: toStorageString(add(account.openingBalance.toString(), moved.amount)),
-      balanceEgp: toStorageString(add(account.openingBalanceEgp.toString(), moved.amountEgp)),
-    };
-  });
+        return {
+          id: account.id,
+          name: account.name,
+          currency: account.currency,
+          color: account.color,
+          icon: account.icon,
+          // A plain sum: amounts carry their own sign (SPEC §4.7).
+          balance: toStorageString(add(account.openingBalance.toString(), moved.amount)),
+          balanceEgp: toStorageString(add(account.openingBalanceEgp.toString(), moved.amountEgp)),
+          isArchived: account.isArchived,
+        };
+      })
+      // An archived account at zero adds nothing to the total, so leaving it out keeps the
+      // panel from filling up with dead accounts without changing what it sums to.
+      .filter((account) => !account.isArchived || !new Decimal(account.balanceEgp).isZero())
+  );
 }
 
 async function buildDebtsDueSoon(db: Db, now: Date): Promise<DebtDueDto[]> {
@@ -345,7 +406,7 @@ export async function getDashboard(
 
   const [netWorth, totals, spendByCategory, daily, accounts, debtsDueSoon, savingsGoals, rates] =
     await Promise.all([
-      buildNetWorth(db, range),
+      buildNetWorth(db, range, now),
       buildTotals(db, range),
       buildSpendByCategory(db, range),
       buildDaily(db, range),

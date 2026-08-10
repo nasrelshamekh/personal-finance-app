@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { RateSource, type Account, type Category } from '@prisma/client';
+import { RateSource, type Account, type Category, type Debt } from '@prisma/client';
 import type { Currency } from '@ledger/shared';
 
 /**
@@ -78,6 +78,30 @@ export async function makeCategory(
       color: '#4a6f9f',
       icon: 'tag',
       parentId: values.parentId ?? null,
+    },
+  });
+}
+
+/** A debt, for the dashboard's "after debts" figures. Payments are added by the caller. */
+export async function makeDebt(
+  tx: Prisma.TransactionClient,
+  values: {
+    counterparty?: string;
+    direction?: 'I_OWE' | 'OWED_TO_ME';
+    principal: string;
+    currency?: Currency;
+    startDate?: Date;
+    status?: 'ACTIVE' | 'SETTLED';
+  },
+): Promise<Debt> {
+  return tx.debt.create({
+    data: {
+      counterparty: values.counterparty ?? 'Someone',
+      direction: values.direction ?? 'I_OWE',
+      principal: values.principal,
+      currency: values.currency ?? 'EGP',
+      startDate: values.startDate ?? new Date('2026-07-01T00:00:00.000Z'),
+      status: values.status ?? 'ACTIVE',
     },
   });
 }

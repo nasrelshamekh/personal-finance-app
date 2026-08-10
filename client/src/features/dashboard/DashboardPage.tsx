@@ -65,10 +65,14 @@ function NetWorthCard({ data }: { data: DashboardDto }) {
   const { netWorth } = data;
   const delta = Number.parseFloat(netWorth.deltaEgp);
 
+  const owedByYou = Number.parseFloat(netWorth.owedByYouEgp);
+  const owedToYou = Number.parseFloat(netWorth.owedToYouEgp);
+  const hasDebts = owedByYou > 0 || owedToYou > 0;
+
   return (
     <article className="rounded-lg border border-border bg-card/40 p-5 sm:col-span-2">
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        Net worth
+        In your accounts
       </p>
       <div className="mt-2">
         <CountUp value={netWorth.egp} currency="EGP" size="xl" tone="plain" />
@@ -83,6 +87,49 @@ function NetWorthCard({ data }: { data: DashboardDto }) {
           </span>
         )}
       </p>
+
+      {/*
+        Two figures, not one. What the accounts hold and what you are worth are different
+        claims, and a ledger with 5,436 in the bank and a 4,000 debt is not a ledger with
+        5,436 — but nor is the debt-adjusted figure the one you spend from. Shown only when
+        there is a debt, so an undebted ledger is not asked to read a second number that
+        always equals the first.
+      */}
+      {hasDebts && (
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              After debts
+            </p>
+            <Money value={netWorth.afterDebtsEgp} currency="EGP" size="lg" tone="plain" />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {owedByYou > 0 && (
+              <>
+                You owe{' '}
+                <span className="font-numeric tabular-nums text-foreground">
+                  {formatAmount(netWorth.owedByYouEgp)}
+                </span>
+              </>
+            )}
+            {owedByYou > 0 && owedToYou > 0 && ' · '}
+            {owedToYou > 0 && (
+              <>
+                Owed to you{' '}
+                <span className="font-numeric tabular-nums text-foreground">
+                  {formatAmount(netWorth.owedToYouEgp)}
+                </span>
+              </>
+            )}
+            {netWorth.debtsConverted && (
+              <>
+                {' · '}
+                <span className="text-money-stale">converted at today’s rate</span>
+              </>
+            )}
+          </p>
+        </div>
+      )}
     </article>
   );
 }
@@ -278,6 +325,12 @@ export function DashboardPage() {
                     />
                     <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                       {account.name}
+                      {/* Still holding money, so still counted — but say why it is here. */}
+                      {account.isArchived && (
+                        <span className="ml-1.5 rounded bg-accent px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Archived
+                        </span>
+                      )}
                     </span>
                     <div className="text-right">
                       <Money

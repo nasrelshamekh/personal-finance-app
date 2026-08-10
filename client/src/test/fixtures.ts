@@ -7,6 +7,7 @@ import type {
   DebtDto,
   DebtPaymentDto,
   FxRatesResponse,
+  NetWorthDto,
   ResolvedRateDto,
   StoredRateDto,
   SavingsContributionDto,
@@ -87,11 +88,31 @@ export function transaction(overrides: Partial<TransactionDto> & { id: string })
   };
 }
 
+/**
+ * Net worth: the accounts figure and the debt-adjusted one beside it. Debt-free by
+ * default, so a test that says nothing about debts gets a card that shows none.
+ */
+export function netWorth(overrides: Partial<NetWorthDto> = {}): NetWorthDto {
+  const base = {
+    egp: '0.0000',
+    previousEgp: '0.0000',
+    deltaEgp: '0.0000',
+    deltaPct: null,
+    owedByYouEgp: '0.0000',
+    owedToYouEgp: '0.0000',
+    debtsConverted: false,
+    ...overrides,
+  };
+
+  // Derived unless a test is deliberately asserting on the arithmetic itself.
+  return { ...base, afterDebtsEgp: overrides.afterDebtsEgp ?? base.egp };
+}
+
 /** A month with nothing in it — the shape, with every figure at zero. */
 export function dashboard(overrides: Partial<DashboardDto> = {}): DashboardDto {
   return {
     month: '2026-08',
-    netWorth: { egp: '0.0000', previousEgp: '0.0000', deltaEgp: '0.0000', deltaPct: null },
+    netWorth: netWorth(),
     totals: {
       incomeEgp: '0.0000',
       expensesEgp: '0.0000',

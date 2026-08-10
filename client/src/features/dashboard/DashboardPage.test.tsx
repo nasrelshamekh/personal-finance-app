@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { DashboardDto } from '@ledger/shared';
 import { stubApi, type ApiStub } from '@/test/http';
-import { account, dashboard, transaction } from '@/test/fixtures';
+import { account, dashboard, netWorth, transaction } from '@/test/fixtures';
 import { DashboardPage } from './DashboardPage';
 
 /**
@@ -67,23 +67,23 @@ describe('an empty ledger', () => {
     render(<Harness />);
 
     expect(await screen.findByText('Nothing to summarise yet')).toBeInTheDocument();
-    expect(screen.queryByText('Net worth')).toBeNull();
+    expect(screen.queryByText('In your accounts')).toBeNull();
   });
 
   it('counts a non-zero net worth as something, even with no transactions', async () => {
     arrange(
       dashboard({
-        netWorth: {
+        netWorth: netWorth({
           egp: '7386.0000',
           previousEgp: '0.0000',
           deltaEgp: '7386.0000',
           deltaPct: null,
-        },
+        }),
       }),
     );
     render(<Harness />);
 
-    expect(await screen.findByText('Net worth')).toBeInTheDocument();
+    expect(await screen.findByText('In your accounts')).toBeInTheDocument();
     expect(screen.queryByText('Nothing to summarise yet')).toBeNull();
   });
 });
@@ -129,12 +129,12 @@ describe('the month picker', () => {
 
 describe('the figures', () => {
   const withMoney = dashboard({
-    netWorth: {
+    netWorth: netWorth({
       egp: '5436.1600',
       previousEgp: '4000.0000',
       deltaEgp: '1436.1600',
       deltaPct: '35.9040',
-    },
+    }),
     totals: {
       incomeEgp: '14860.0000',
       expensesEgp: '9423.8400',
@@ -150,6 +150,7 @@ describe('the figures', () => {
         icon: 'wallet',
         balance: '7386.0000',
         balanceEgp: '7386.0000',
+        isArchived: false,
       },
       {
         id: 'acc-usd',
@@ -159,6 +160,7 @@ describe('the figures', () => {
         icon: 'landmark',
         balance: '-38.1400',
         balanceEgp: '-1949.8400',
+        isArchived: false,
       },
     ],
   });
@@ -173,12 +175,17 @@ describe('the figures', () => {
   it('says nothing about a percentage when there is no baseline to compare against', async () => {
     arrange(
       dashboard({
-        netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+        netWorth: netWorth({
+          egp: '100.0000',
+          previousEgp: '0.0000',
+          deltaEgp: '100.0000',
+          deltaPct: null,
+        }),
       }),
     );
     render(<Harness />);
 
-    await screen.findByText('Net worth');
+    await screen.findByText('In your accounts');
     expect(screen.queryByText(/%\)/)).toBeNull();
   });
 
@@ -238,12 +245,12 @@ describe('the figures', () => {
   it('adds the balances as decimals, not as floats', async () => {
     arrange(
       dashboard({
-        netWorth: {
+        netWorth: netWorth({
           egp: '9007199254740992.4500',
           previousEgp: '0.0000',
           deltaEgp: '9007199254740992.4500',
           deltaPct: null,
-        },
+        }),
         accounts: [
           { ...account({ id: 'a', name: 'One' }), balanceEgp: '9007199254740992.0000' },
           { ...account({ id: 'b', name: 'Two' }), balanceEgp: '0.4500' },
@@ -259,9 +266,149 @@ describe('the figures', () => {
   });
 });
 
+/**
+ * What the accounts hold and what you are worth are different claims. The card used to
+ * report the first and call it net worth, so a ledger with 5,436 in the bank and a 4,000
+ * debt read as 5,436. Both figures now, because collapsing them hides one of the answers.
+ */
+describe('after debts', () => {
+  const owing = dashboard({
+    netWorth: netWorth({
+      egp: '5436.0000',
+      previousEgp: '5436.0000',
+      deltaEgp: '0.0000',
+      owedByYouEgp: '4000.0000',
+      afterDebtsEgp: '1436.0000',
+    }),
+  });
+
+  it('shows the accounts figure under a label that says what it is', async () => {
+    arrange(owing);
+    render(<Harness />);
+
+    expect(await screen.findByText('In your accounts')).toBeInTheDocument();
+    expect(screen.queryByText('Net worth')).toBeNull();
+  });
+
+  it('shows the debt-adjusted figure beside it, and what was taken off', async () => {
+    arrange(owing);
+    render(<Harness />);
+
+    expect(await screen.findByText('After debts')).toBeInTheDocument();
+    expect(screen.getByText('1,436.00')).toBeInTheDocument();
+    expect(screen.getByText(/You owe/)).toBeInTheDocument();
+    expect(screen.getByText('4,000.00')).toBeInTheDocument();
+  });
+
+  it('counts what is owed to you as well', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({
+          egp: '1000.0000',
+          owedToYouEgp: '250.0000',
+          afterDebtsEgp: '1250.0000',
+        }),
+      }),
+    );
+    render(<Harness />);
+
+    expect(await screen.findByText(/Owed to you/)).toBeInTheDocument();
+    expect(screen.getByText('1,250.00')).toBeInTheDocument();
+  });
+
+  /** A second figure that always equals the first is noise, not information. */
+  it('says nothing about debts when there are none', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({ egp: '5436.0000', deltaEgp: '5436.0000' }),
+      }),
+    );
+    render(<Harness />);
+
+    await screen.findByText('In your accounts');
+    expect(screen.queryByText('After debts')).toBeNull();
+  });
+
+  /**
+   * A debt lives in its own currency (D4), so converting one puts today's rate inside an
+   * otherwise frozen figure. Said out loud rather than quietly folded in.
+   */
+  it('admits when a foreign debt was converted at today’s rate', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({
+          egp: '10000.0000',
+          owedByYouEgp: '5000.0000',
+          afterDebtsEgp: '5000.0000',
+          debtsConverted: true,
+        }),
+      }),
+    );
+    render(<Harness />);
+
+    expect(await screen.findByText(/converted at today’s rate/)).toBeInTheDocument();
+  });
+
+  it('claims nothing about conversion when every debt is already in pounds', async () => {
+    arrange(owing);
+    render(<Harness />);
+
+    await screen.findByText('After debts');
+    expect(screen.queryByText(/converted at today’s rate/)).toBeNull();
+  });
+});
+
+describe('an archived account that still holds money', () => {
+  /** Net worth counts it either way, so hiding it would stop the panel adding up. */
+  it('is listed, and marked as archived', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({ egp: '900.0000', deltaEgp: '900.0000' }),
+        accounts: [
+          {
+            ...account({ id: 'acc-old', name: 'Old wallet' }),
+            balance: '900.0000',
+            balanceEgp: '900.0000',
+            isArchived: true,
+          },
+        ],
+      }),
+    );
+    render(<Harness />);
+
+    expect(await screen.findByText('Old wallet')).toBeInTheDocument();
+    expect(screen.getByText('Archived')).toBeInTheDocument();
+  });
+
+  it('marks nothing when the account is live', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({ egp: '900.0000', deltaEgp: '900.0000' }),
+        accounts: [
+          {
+            ...account({ id: 'acc-cash', name: 'Cash' }),
+            balance: '900.0000',
+            balanceEgp: '900.0000',
+            isArchived: false,
+          },
+        ],
+      }),
+    );
+    render(<Harness />);
+
+    await screen.findByText('Cash');
+    expect(screen.queryByText('Archived')).toBeNull();
+  });
+});
+
 describe('where it went', () => {
   const spending = dashboard({
-    netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+    netWorth: netWorth({
+      egp: '100.0000',
+      previousEgp: '0.0000',
+      deltaEgp: '100.0000',
+      deltaPct: null,
+    }),
     spendByCategory: [
       {
         categoryId: null,
@@ -316,7 +463,12 @@ describe('where it went', () => {
   it('says so plainly when nothing was spent', async () => {
     arrange(
       dashboard({
-        netWorth: { egp: '10.0000', previousEgp: '0.0000', deltaEgp: '10.0000', deltaPct: null },
+        netWorth: netWorth({
+          egp: '10.0000',
+          previousEgp: '0.0000',
+          deltaEgp: '10.0000',
+          deltaPct: null,
+        }),
       }),
     );
     render(<Harness />);
@@ -329,7 +481,12 @@ describe('the recent list', () => {
   it('labels a transfer as a transfer rather than as a category', async () => {
     arrange(
       dashboard({
-        netWorth: { egp: '10.0000', previousEgp: '0.0000', deltaEgp: '10.0000', deltaPct: null },
+        netWorth: netWorth({
+          egp: '10.0000',
+          previousEgp: '0.0000',
+          deltaEgp: '10.0000',
+          deltaPct: null,
+        }),
         recentTransactions: [
           transaction({ id: 'tx-1', type: 'TRANSFER', amount: '-500.0000' }),
           transaction({ id: 'tx-2', type: 'EXPENSE', amount: '-100.0000' }),
@@ -348,7 +505,12 @@ describe('the recent list', () => {
 
 describe('debts and savings', () => {
   const base = dashboard({
-    netWorth: { egp: '10.0000', previousEgp: '0.0000', deltaEgp: '10.0000', deltaPct: null },
+    netWorth: netWorth({
+      egp: '10.0000',
+      previousEgp: '0.0000',
+      deltaEgp: '10.0000',
+      deltaPct: null,
+    }),
   });
 
   it('counts an overdue debt in days rather than showing a negative', async () => {
@@ -395,7 +557,7 @@ describe('debts and savings', () => {
     arrange(base);
     render(<Harness />);
 
-    await screen.findByText('Net worth');
+    await screen.findByText('In your accounts');
     expect(screen.queryByText('Due in the next 30 days')).toBeNull();
     expect(screen.queryByText('Savings')).toBeNull();
   });
@@ -511,7 +673,12 @@ describe('the recent panel', () => {
     arrange(
       dashboard({
         month: '2026-03',
-        netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+        netWorth: netWorth({
+          egp: '100.0000',
+          previousEgp: '0.0000',
+          deltaEgp: '100.0000',
+          deltaPct: null,
+        }),
       }),
     );
     render(<Harness initialUrl="/?month=2026-03" />);
@@ -523,7 +690,12 @@ describe('the recent panel', () => {
   it('says the month is empty rather than that nothing was ever recorded', async () => {
     arrange(
       dashboard({
-        netWorth: { egp: '100.0000', previousEgp: '0.0000', deltaEgp: '100.0000', deltaPct: null },
+        netWorth: netWorth({
+          egp: '100.0000',
+          previousEgp: '0.0000',
+          deltaEgp: '100.0000',
+          deltaPct: null,
+        }),
         recentTransactions: [],
       }),
     );
