@@ -219,6 +219,40 @@ describe('the figures', () => {
     expect(screen.getByText('-1,949.84 EGP')).toBeInTheDocument();
   });
 
+  /**
+   * Same claim the accounts page makes per card, made once for the panel: every pound
+   * figure here is a sum of historical conversions, not what the balance is worth today.
+   * Repeating it down a list of five would be noise.
+   */
+  it('says the pound figures are historical, once for the panel', async () => {
+    arrange(withMoney);
+    render(<Harness />);
+
+    await screen.findByText('Bank (USD)');
+    expect(
+      screen.getByText('Pound figures are at the rates when each row was recorded.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about rates when every account is already in pounds', async () => {
+    arrange(
+      dashboard({
+        netWorth: netWorth({ egp: '7386.0000', deltaEgp: '7386.0000' }),
+        accounts: [
+          {
+            ...account({ id: 'acc-egp', name: 'Cash (EGP)' }),
+            balance: '7386.0000',
+            balanceEgp: '7386.0000',
+          },
+        ],
+      }),
+    );
+    render(<Harness />);
+
+    await screen.findByText('Cash (EGP)');
+    expect(screen.queryByText(/at the rates when each row was recorded/)).toBeNull();
+  });
+
   it('totals every account in pounds', async () => {
     arrange(withMoney);
     render(<Harness />);

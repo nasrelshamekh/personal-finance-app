@@ -348,6 +348,18 @@ export function DashboardPage() {
                   </li>
                 ))}
               </ul>
+
+              {/*
+                Once for the panel, not once per row. The same qualifier the accounts page
+                carries per card — every pound figure here is a sum of historical
+                conversions, not what the balance is worth today — but repeating it down a
+                list of five would be noise, and only foreign accounts show one at all.
+              */}
+              {data.accounts.some((account) => account.currency !== 'EGP') && (
+                <p className="mt-3 text-[11px] text-muted-foreground">
+                  Pound figures are at the rates when each row was recorded.
+                </p>
+              )}
             </article>
           </section>
 

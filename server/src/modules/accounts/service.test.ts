@@ -216,14 +216,15 @@ describe('balance history', () => {
   it('reports one closing balance per day of the window', async () => {
     await withRollback(async (tx) => {
       await makeStandardRates(tx);
-      await makeAccount(tx, {
+      const made = await makeAccount(tx, {
         currency: 'EGP',
         openingBalance: '1000.0000',
         openingRateToEgp: '1',
         openingDate: new Date('2026-01-01T00:00:00.000Z'),
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const all = await listAccounts(tx, false, NOW);
+      const dto = all.find((row) => row.id === made.id);
       expect(dto?.balanceHistory).toHaveLength(30);
     });
   });
@@ -247,7 +248,7 @@ describe('balance history', () => {
         note: null,
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const dto = (await listAccounts(tx, false, NOW)).find((row) => row.id === account.id);
       const history = dto?.balanceHistory ?? [];
 
       // Flat at 1,000 until the 29th, then 750 for the 29th and the 30th.
@@ -277,7 +278,7 @@ describe('balance history', () => {
         note: null,
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const dto = (await listAccounts(tx, false, NOW)).find((row) => row.id === account.id);
       expect(dto?.balanceHistory[0]).toBe('1400.0000');
     });
   });
@@ -290,14 +291,15 @@ describe('balance history', () => {
   it('starts at the opening date for an account younger than the window', async () => {
     await withRollback(async (tx) => {
       await makeStandardRates(tx);
-      await makeAccount(tx, {
+      const made = await makeAccount(tx, {
         currency: 'EGP',
         openingBalance: '500.0000',
         openingRateToEgp: '1',
         openingDate: new Date('2026-08-28T00:00:00.000Z'),
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const all = await listAccounts(tx, false, NOW);
+      const dto = all.find((row) => row.id === made.id);
 
       // 28th, 29th, 30th.
       expect(dto?.balanceHistory).toHaveLength(3);
@@ -309,14 +311,15 @@ describe('balance history', () => {
   it('gives an account opened today a single point', async () => {
     await withRollback(async (tx) => {
       await makeStandardRates(tx);
-      await makeAccount(tx, {
+      const made = await makeAccount(tx, {
         currency: 'EGP',
         openingBalance: '500.0000',
         openingRateToEgp: '1',
         openingDate: new Date('2026-08-30T08:00:00.000Z'),
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const all = await listAccounts(tx, false, NOW);
+      const dto = all.find((row) => row.id === made.id);
       expect(dto?.balanceHistory).toHaveLength(1);
     });
   });
@@ -325,14 +328,15 @@ describe('balance history', () => {
   it('is in the account’s own currency, not pounds', async () => {
     await withRollback(async (tx) => {
       await makeStandardRates(tx);
-      await makeAccount(tx, {
+      const made = await makeAccount(tx, {
         currency: 'USD',
         openingBalance: '100.0000',
         openingRateToEgp: '50',
         openingDate: new Date('2026-01-01T00:00:00.000Z'),
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const all = await listAccounts(tx, false, NOW);
+      const dto = all.find((row) => row.id === made.id);
       expect(dto?.balanceHistory.at(-1)).toBe('100.0000');
     });
   });
@@ -356,7 +360,7 @@ describe('balance history', () => {
         note: null,
       });
 
-      const [dto] = await listAccounts(tx, false, NOW);
+      const dto = (await listAccounts(tx, false, NOW)).find((row) => row.id === account.id);
       expect(dto?.balanceHistory.at(-1)).toBe(dto?.balance);
     });
   });
