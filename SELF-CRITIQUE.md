@@ -93,10 +93,10 @@ representable in the UI instead of showing as "Any category".
 
 ## Things I considered and did not count
 
-- **The accounts screen has no per-account sparkline** (`SPEC.md` §9). True, and it is a
-  real gap — but it is a missing enhancement, not something that misleads. *(The drill-down
-  this entry originally also claimed was missing does exist: each card links through to
-  `/transactions?accountId=…`.)*
+- ~~**The accounts screen has no per-account sparkline** (`SPEC.md` §9).~~ *Built later,
+  along with the inline quick-add row §9 also asks for. The drill-down this entry
+  originally also claimed was missing had existed all along: each card links through to
+  `/transactions?accountId=…`.*
 - **The transactions table is dense at 1280px.** Genuinely tight, but it is the deliberate
   instrument-panel density from §10, and no figure is unreadable.
 - **No undo on a bulk delete.** Worth having. It is a new feature with its own design

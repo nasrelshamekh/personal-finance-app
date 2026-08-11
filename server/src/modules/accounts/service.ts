@@ -1,6 +1,7 @@
 import type { Account, Prisma } from '@prisma/client';
 import {
   BASE_CURRENCY,
+  Decimal,
   type AccountDto,
   type CreateAccountInput,
   type DeleteAccountResponse,
@@ -41,7 +42,79 @@ async function totalsByAccount(db: Db, accountIds: string[]): Promise<Map<string
   );
 }
 
-function toDto(account: Account, totals: AccountTotals | undefined): AccountDto {
+/** How many days the accounts screen's sparkline covers (SPEC §9). */
+const HISTORY_DAYS = 30;
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/**
+ * Closing balance per day for the last 30 days, per account, in the account's own currency.
+ *
+ * Built from two reads rather than thirty: the balance carried into the window, then every
+ * row inside it bucketed by day and accumulated forward. The series starts at the account's
+ * opening date when that falls inside the window, so a young account reports the days it
+ * actually existed instead of a flat run of invented ones — which is also what stops the
+ * sparkline drawing a straight line implying a fortnight of stability that never happened.
+ */
+async function historyByAccount(
+  db: Db,
+  accounts: Account[],
+  now: Date,
+): Promise<Map<string, string[]>> {
+  const history = new Map<string, string[]>();
+  if (accounts.length === 0) return history;
+
+  const today = startOfUtcDay(now);
+  const windowStart = new Date(today.getTime() - (HISTORY_DAYS - 1) * 24 * 60 * 60 * 1000);
+  const ids = accounts.map((account) => account.id);
+
+  const [carried, inWindow] = await Promise.all([
+    db.transaction.groupBy({
+      by: ['accountId'],
+      where: { accountId: { in: ids }, date: { lt: windowStart } },
+      _sum: { amount: true },
+    }),
+    db.transaction.findMany({
+      where: { accountId: { in: ids }, date: { gte: windowStart } },
+      select: { accountId: true, date: true, amount: true },
+    }),
+  ]);
+
+  const before = new Map(carried.map((row) => [row.accountId, row._sum.amount?.toString() ?? '0']));
+
+  const movementsByDay = new Map<string, Decimal>();
+  for (const row of inWindow) {
+    const key = `${row.accountId}:${startOfUtcDay(row.date).toISOString()}`;
+    movementsByDay.set(key, add(movementsByDay.get(key) ?? '0', row.amount.toString()));
+  }
+
+  for (const account of accounts) {
+    const opened = startOfUtcDay(account.openingDate);
+    const from = opened > windowStart ? opened : windowStart;
+
+    let running = add(account.openingBalance.toString(), before.get(account.id) ?? '0');
+    const points: string[] = [];
+
+    for (let day = new Date(windowStart); day <= today; day.setUTCDate(day.getUTCDate() + 1)) {
+      running = add(running, movementsByDay.get(`${account.id}:${day.toISOString()}`) ?? '0');
+      // Days before the account existed are skipped, not zeroed: it had no balance then,
+      // and a zero would draw a cliff on the first day it was opened.
+      if (day >= from) points.push(toStorageString(running));
+    }
+
+    history.set(account.id, points);
+  }
+
+  return history;
+}
+
+function toDto(
+  account: Account,
+  totals: AccountTotals | undefined,
+  balanceHistory: string[],
+): AccountDto {
   const summed = totals ?? { amount: '0', amountEgp: '0', count: 0 };
 
   return {
@@ -61,10 +134,15 @@ function toDto(account: Account, totals: AccountTotals | undefined): AccountDto 
     balance: toStorageString(add(account.openingBalance.toString(), summed.amount)),
     balanceEgp: toStorageString(add(account.openingBalanceEgp.toString(), summed.amountEgp)),
     transactionCount: summed.count,
+    balanceHistory,
   };
 }
 
-export async function listAccounts(db: Db, includeArchived: boolean): Promise<AccountDto[]> {
+export async function listAccounts(
+  db: Db,
+  includeArchived: boolean,
+  now: Date = new Date(),
+): Promise<AccountDto[]> {
   const where: Prisma.AccountWhereInput = includeArchived ? {} : { isArchived: false };
 
   const accounts = await db.account.findMany({
@@ -72,20 +150,27 @@ export async function listAccounts(db: Db, includeArchived: boolean): Promise<Ac
     orderBy: [{ isArchived: 'asc' }, { createdAt: 'asc' }],
   });
 
-  const totals = await totalsByAccount(
-    db,
-    accounts.map((account) => account.id),
-  );
+  const ids = accounts.map((account) => account.id);
+  const [totals, history] = await Promise.all([
+    totalsByAccount(db, ids),
+    historyByAccount(db, accounts, now),
+  ]);
 
-  return accounts.map((account) => toDto(account, totals.get(account.id)));
+  return accounts.map((account) =>
+    toDto(account, totals.get(account.id), history.get(account.id) ?? []),
+  );
 }
 
-export async function getAccount(db: Db, id: string): Promise<AccountDto> {
+export async function getAccount(db: Db, id: string, now: Date = new Date()): Promise<AccountDto> {
   const account = await db.account.findUnique({ where: { id } });
   if (!account) throw AppError.notFound('That account does not exist.');
 
-  const totals = await totalsByAccount(db, [id]);
-  return toDto(account, totals.get(id));
+  const [totals, history] = await Promise.all([
+    totalsByAccount(db, [id]),
+    historyByAccount(db, [account], now),
+  ]);
+
+  return toDto(account, totals.get(id), history.get(id) ?? []);
 }
 
 /**
@@ -113,7 +198,7 @@ export async function createAccount(db: Db, input: CreateAccountInput): Promise<
     },
   });
 
-  return toDto(account, undefined);
+  return toDto(account, undefined, [toStorageString(account.openingBalance.toString())]);
 }
 
 export async function updateAccount(
@@ -158,12 +243,15 @@ export async function deleteAccount(db: Db, id: string): Promise<DeleteAccountRe
   }
 
   await db.account.delete({ where: { id } });
-  return { outcome: 'deleted', account: toDto(account, undefined) };
+  return { outcome: 'deleted', account: toDto(account, undefined, []) };
 }
 
 async function withTotals(db: Db, account: Account): Promise<AccountDto> {
-  const totals = await totalsByAccount(db, [account.id]);
-  return toDto(account, totals.get(account.id));
+  const [totals, history] = await Promise.all([
+    totalsByAccount(db, [account.id]),
+    historyByAccount(db, [account], new Date()),
+  ]);
+  return toDto(account, totals.get(account.id), history.get(account.id) ?? []);
 }
 
 /** Shared by the transaction service, which must check currency and archive state. */

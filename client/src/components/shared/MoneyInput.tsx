@@ -27,10 +27,30 @@ export interface MoneyInputProps {
   autoFocus?: boolean;
   className?: string;
   'aria-label'?: string;
+  /**
+   * Called on Enter, but only once there is no arithmetic left to resolve.
+   *
+   * Enter already means "work that out" while `1200*3` is showing, so a submit handler
+   * that fired on the same keystroke would send an unresolved expression the first time
+   * and the figure the second — the same key doing two different things depending on what
+   * you happened to type. First Enter resolves, second submits.
+   */
+  onEnter?: () => void;
 }
 
 export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyInput(
-  { value, onChange, currency, id, error, placeholder = '0.00', autoFocus, className, ...rest },
+  {
+    value,
+    onChange,
+    currency,
+    id,
+    error,
+    placeholder = '0.00',
+    autoFocus,
+    className,
+    onEnter,
+    ...rest
+  },
   ref,
 ) {
   const generatedId = useId();
@@ -63,6 +83,12 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
       if (showsArithmetic && parsed?.ok === true) {
         event.preventDefault();
         resolve();
+        return;
+      }
+
+      if (onEnter !== undefined) {
+        event.preventDefault();
+        onEnter();
       }
       return;
     }

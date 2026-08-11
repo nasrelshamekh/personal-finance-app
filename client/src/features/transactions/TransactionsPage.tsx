@@ -23,6 +23,7 @@ import { useCategories } from '@/features/categories/queries';
 import type { TransactionFilters as Filters } from './api';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionSheet } from './TransactionSheet';
+import { QuickAddRow } from './QuickAddRow';
 import { useDeleteTransaction, useTransactions, useUpdateTransaction } from './queries';
 
 const PAGE_SIZE = 25;
@@ -307,6 +308,16 @@ export function TransactionsPage() {
   const rows = useMemo(() => data?.data ?? [], [data]);
   const meta = data?.meta;
 
+  /** Same rule the filter badge counts by: `page` and `pageSize` are bookkeeping. */
+  const hasActiveFilters = useMemo(
+    () =>
+      Object.entries(filters).some(
+        ([key, value]) =>
+          !['page', 'pageSize'].includes(key) && value !== undefined && value !== '',
+      ),
+    [filters],
+  );
+
   /**
    * Which kinds of category the selection can legally take.
    *
@@ -544,6 +555,13 @@ export function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
+                {/*
+                  SPEC §9's inline quick-add. Only when the list is unfiltered: a row added
+                  under a filter it does not match would appear to vanish the moment it
+                  saved, which reads as a failure rather than a success.
+                */}
+                {!hasActiveFilters && <QuickAddRow />}
+
                 {rows.map((row) => (
                   <tr
                     key={row.id}

@@ -284,9 +284,11 @@ describe('what a row calls itself', () => {
     ]);
     render(<Harness />);
 
+    // Scoped to a span: the quick-add row's category picker lists these names too, as
+    // `<option>`s, and a bare text query cannot tell a row from a dropdown entry.
     const shown = await tableWhenReady();
-    expect(shown.getByText('Groceries')).toBeInTheDocument();
-    expect(shown.queryByText('Uncategorised')).toBeNull();
+    expect(shown.getByText('Groceries', { selector: 'span' })).toBeInTheDocument();
+    expect(shown.queryByText('Uncategorised', { selector: 'span' })).toBeNull();
   });
 
   /**
@@ -300,7 +302,7 @@ describe('what a row calls itself', () => {
 
     const shown = await tableWhenReady();
     expect(shown.getByText('Expense')).toBeInTheDocument();
-    expect(shown.getByText('Uncategorised')).toBeInTheDocument();
+    expect(shown.getByText('Uncategorised', { selector: 'span' })).toBeInTheDocument();
   });
 
   /** The case that made this worth changing: two bare rows that used to read identically. */
@@ -520,6 +522,155 @@ describe('recategorising a selection', () => {
 
     expect(screen.getByRole('combobox', { name: 'Recategorise selected' })).toBeDisabled();
     expect(screen.getByText('Transfers have no category')).toBeInTheDocument();
+  });
+});
+
+/**
+ * SPEC §9's inline quick-add. It exists to be faster than pressing `n`, so it takes an
+ * amount, an account and a category and nothing else — and dates the row today.
+ */
+describe('the quick-add row', () => {
+  const created = () => api.requestsFor('POST /transactions')[0]?.body as Record<string, unknown>;
+
+  function stubCreate() {
+    api.setRoute('POST /transactions', { status: 201, body: { id: 'tx-new' } });
+  }
+
+  it('adds an expense from an amount alone', async () => {
+    const user = userEvent.setup();
+    arrange();
+    stubCreate();
+    render(<Harness />);
+    await rowsShown();
+
+    await user.type(screen.getByLabelText('Amount for the new transaction'), '250');
+    await user.click(screen.getByRole('button', { name: 'Add this transaction' }));
+
+    await waitFor(() => expect(api.requestsFor('POST /transactions')).toHaveLength(1));
+    expect(created()).toMatchObject({
+      type: 'EXPENSE',
+      amount: '250',
+      accountId: CASH.id,
+      categoryId: null,
+    });
+    expect(created()['date']).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('switches to income, and offers only the categories that fit', async () => {
+    const user = userEvent.setup();
+    arrange(ROWS, undefined, undefined, [
+      GROCERIES,
+      category({ id: 'cat-salary', name: 'Salary', kind: 'INCOME' }),
+    ]);
+    stubCreate();
+    render(<Harness />);
+    await rowsShown();
+
+    const picker = screen.getByLabelText('Category for the new transaction');
+    expect(within(picker).getByRole('option', { name: 'Groceries' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'In' }));
+
+    expect(within(picker).getByRole('option', { name: 'Salary' })).toBeInTheDocument();
+    expect(within(picker).queryByRole('option', { name: 'Groceries' })).toBeNull();
+  });
+
+  it('sends the account and category that were chosen', async () => {
+    const user = userEvent.setup();
+    arrange();
+    stubCreate();
+    render(<Harness />);
+    await rowsShown();
+
+    await user.selectOptions(screen.getByLabelText('Account for the new transaction'), BANK.id);
+    await user.selectOptions(
+      screen.getByLabelText('Category for the new transaction'),
+      GROCERIES.id,
+    );
+    await user.type(screen.getByLabelText('Amount for the new transaction'), '40');
+    await user.click(screen.getByRole('button', { name: 'Add this transaction' }));
+
+    await waitFor(() => expect(api.requestsFor('POST /transactions')).toHaveLength(1));
+    expect(created()).toMatchObject({ accountId: BANK.id, categoryId: GROCERIES.id });
+  });
+
+  /**
+   * Enter already means "work that out" while an expression is showing, so the first one
+   * resolves `100*3` and only the second submits. The same key doing two things depending
+   * on what you typed would be worse than no shortcut at all.
+   */
+  it('resolves an expression on the first Enter and submits on the second', async () => {
+    const user = userEvent.setup();
+    arrange();
+    stubCreate();
+    render(<Harness />);
+    await rowsShown();
+
+    const amount = screen.getByLabelText('Amount for the new transaction');
+    await user.type(amount, '100*3{Enter}');
+
+    expect(amount).toHaveValue('300.00');
+    expect(api.requestsFor('POST /transactions')).toHaveLength(0);
+
+    await user.type(amount, '{Enter}');
+
+    await waitFor(() => expect(api.requestsFor('POST /transactions')).toHaveLength(1));
+    expect(created()['amount']).toBe('300.00');
+  });
+
+  it('clears itself afterwards, ready for the next one', async () => {
+    const user = userEvent.setup();
+    arrange();
+    stubCreate();
+    render(<Harness />);
+    await rowsShown();
+
+    await user.type(screen.getByLabelText('Amount for the new transaction'), '250{Enter}');
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Amount for the new transaction')).toHaveValue(''),
+    );
+  });
+
+  it('will not add nothing', async () => {
+    arrange();
+    render(<Harness />);
+    await rowsShown();
+
+    expect(screen.getByRole('button', { name: 'Add this transaction' })).toBeDisabled();
+  });
+
+  /** No inline room for an error, so it goes to the shared region like any list-row action. */
+  it('reports a failure rather than clearing as though it worked', async () => {
+    const user = userEvent.setup();
+    arrange();
+    api.setRoute('POST /transactions', {
+      status: 500,
+      body: { error: { code: 'X', message: 'Database unavailable.' } },
+    });
+    render(<Harness />);
+    await rowsShown();
+
+    await user.type(screen.getByLabelText('Amount for the new transaction'), '250{Enter}');
+
+    await waitFor(() => expect(getFailures()).toHaveLength(1));
+    expect(getFailures()[0]).toMatchObject({
+      headline: 'That transaction could not be added.',
+      detail: 'Database unavailable.',
+    });
+    expect(screen.getByLabelText('Amount for the new transaction')).toHaveValue('250');
+  });
+
+  /**
+   * A row added under a filter it does not match would appear to vanish the moment it
+   * saved, which reads as a failure rather than a success.
+   */
+  it('stays out of the way while a filter is on', async () => {
+    arrange();
+    render(<Harness initialUrl="/transactions?type=EXPENSE" />);
+    await rowsShown();
+
+    expect(screen.queryByLabelText('Amount for the new transaction')).toBeNull();
   });
 });
 

@@ -203,3 +203,161 @@ describe('archiving', () => {
     });
   });
 });
+
+/**
+ * The 30-day series behind the accounts screen's sparkline (SPEC §9).
+ *
+ * These fix `now` rather than using the wall clock, so the window is a known 30 days and
+ * an assertion about its length cannot drift into next month.
+ */
+describe('balance history', () => {
+  const NOW = new Date('2026-08-30T12:00:00.000Z');
+
+  it('reports one closing balance per day of the window', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '1000.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      expect(dto?.balanceHistory).toHaveLength(30);
+    });
+  });
+
+  it('carries the balance forward and steps on the day a row lands', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      const account = await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '1000.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '250',
+        accountId: account.id,
+        categoryId: null,
+        date: new Date('2026-08-29T09:00:00.000Z'),
+        note: null,
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      const history = dto?.balanceHistory ?? [];
+
+      // Flat at 1,000 until the 29th, then 750 for the 29th and the 30th.
+      expect(history[0]).toBe('1000.0000');
+      expect(history.at(-2)).toBe('750.0000');
+      expect(history.at(-1)).toBe('750.0000');
+    });
+  });
+
+  /** Rows from before the window are in the opening figure, not lost. */
+  it('includes everything that happened before the window in the first point', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      const account = await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '1000.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await createTransaction(tx, {
+        type: 'INCOME',
+        amount: '400',
+        accountId: account.id,
+        categoryId: null,
+        date: new Date('2026-03-15T09:00:00.000Z'),
+        note: null,
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      expect(dto?.balanceHistory[0]).toBe('1400.0000');
+    });
+  });
+
+  /**
+   * A young account reports the days it actually existed. Padding backwards would draw a
+   * fortnight of flat history that never happened, which is the one thing a trend line
+   * must not do.
+   */
+  it('starts at the opening date for an account younger than the window', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '500.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-08-28T00:00:00.000Z'),
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+
+      // 28th, 29th, 30th.
+      expect(dto?.balanceHistory).toHaveLength(3);
+      expect(dto?.balanceHistory[0]).toBe('500.0000');
+    });
+  });
+
+  /** One point is not a trend, and the sparkline declines to draw it. */
+  it('gives an account opened today a single point', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '500.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-08-30T08:00:00.000Z'),
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      expect(dto?.balanceHistory).toHaveLength(1);
+    });
+  });
+
+  /** The card's hero figure is the native balance, so the series has to match it. */
+  it('is in the account’s own currency, not pounds', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      await makeAccount(tx, {
+        currency: 'USD',
+        openingBalance: '100.0000',
+        openingRateToEgp: '50',
+        openingDate: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      expect(dto?.balanceHistory.at(-1)).toBe('100.0000');
+    });
+  });
+
+  it('ends on the balance the card prints', async () => {
+    await withRollback(async (tx) => {
+      await makeStandardRates(tx);
+      const account = await makeAccount(tx, {
+        currency: 'EGP',
+        openingBalance: '1000.0000',
+        openingRateToEgp: '1',
+        openingDate: new Date('2026-01-01T00:00:00.000Z'),
+      });
+
+      await createTransaction(tx, {
+        type: 'EXPENSE',
+        amount: '125.50',
+        accountId: account.id,
+        categoryId: null,
+        date: new Date('2026-08-20T09:00:00.000Z'),
+        note: null,
+      });
+
+      const [dto] = await listAccounts(tx, false, NOW);
+      expect(dto?.balanceHistory.at(-1)).toBe(dto?.balance);
+    });
+  });
+});

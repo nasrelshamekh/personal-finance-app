@@ -374,3 +374,61 @@ describe('editing an account', () => {
     expect(within(sheet).getByText('Edit account')).toBeInTheDocument();
   });
 });
+
+/**
+ * SPEC §9's per-account sparkline. Decoration: the balance beside it is the fact, and the
+ * shape only says which way it has been going — so it is hidden from assistive tech, and
+ * the interesting cases are the ones where it declines to draw at all.
+ */
+describe('the sparkline', () => {
+  const chart = (container: HTMLElement) => container.querySelector('svg[viewBox="0 0 64 18"]');
+
+  it('draws the balance trend beside the figure', async () => {
+    arrange([
+      account({
+        id: 'acc-egp',
+        name: 'Cash (EGP)',
+        balance: '750.0000',
+        balanceHistory: ['1000.0000', '1000.0000', '750.0000'],
+      }),
+    ]);
+    const { container } = render(<Harness />);
+
+    await screen.findByText('Cash (EGP)');
+    expect(chart(container)).not.toBeNull();
+  });
+
+  /** One balance is not a trend — a new account gets a single point and nothing is drawn. */
+  it('draws nothing for an account with one day of history', async () => {
+    arrange([account({ id: 'acc-new', name: 'Opened today', balanceHistory: ['500.0000'] })]);
+    const { container } = render(<Harness />);
+
+    await screen.findByText('Opened today');
+    expect(chart(container)).toBeNull();
+  });
+
+  it('says nothing to a screen reader, because the balance already did', async () => {
+    arrange([
+      account({
+        id: 'acc-egp',
+        name: 'Cash (EGP)',
+        balanceHistory: ['1000.0000', '750.0000'],
+      }),
+    ]);
+    const { container } = render(<Harness />);
+
+    await screen.findByText('Cash (EGP)');
+    expect(chart(container)).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('gives each account its own', async () => {
+    arrange([
+      account({ id: 'a', name: 'One', balanceHistory: ['1.0000', '2.0000'] }),
+      account({ id: 'b', name: 'Two', balanceHistory: ['3.0000', '1.0000'] }),
+    ]);
+    const { container } = render(<Harness />);
+
+    await screen.findByText('Two');
+    expect(container.querySelectorAll('svg[viewBox="0 0 64 18"]')).toHaveLength(2);
+  });
+});

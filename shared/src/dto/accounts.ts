@@ -25,6 +25,17 @@ export interface AccountDto {
   /** Derived from frozen figures: openingBalanceEgp + the signed sum of amountEgp. */
   balanceEgp: string;
   transactionCount: number;
+
+  /**
+   * Closing balance for each of the last 30 days, oldest first, in the account's own
+   * currency (SPEC §9's sparkline).
+   *
+   * Starts at the account's opening date rather than always 30 days back, so a week-old
+   * account has seven points instead of a fortnight of invented flat history. That also
+   * means a brand-new one has a single point, which the sparkline declines to draw — one
+   * balance is not a trend.
+   */
+  balanceHistory: string[];
 }
 
 export const createAccountSchema = z.object({

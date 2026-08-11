@@ -63,7 +63,8 @@ afterEach(() => {
 });
 
 const created = () => api.requestsFor('POST /accounts')[0]?.body as Record<string, unknown>;
-const patched = () => api.requestsFor('PATCH /accounts/acc-usd')[0]?.body as Record<string, unknown>;
+const patched = () =>
+  api.requestsFor('PATCH /accounts/acc-usd')[0]?.body as Record<string, unknown>;
 
 describe('creating an account', () => {
   it('sends the name, type, currency and opening figures', async () => {

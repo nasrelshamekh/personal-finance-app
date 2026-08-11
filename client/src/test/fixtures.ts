@@ -40,6 +40,8 @@ export function account(overrides: Partial<AccountDto> & { id: string; name: str
     balance: '0.0000',
     balanceEgp: '0.0000',
     transactionCount: 0,
+    // Two points, so a card renders a sparkline unless a test says otherwise.
+    balanceHistory: ['0.0000', '0.0000'],
     ...overrides,
   };
 }

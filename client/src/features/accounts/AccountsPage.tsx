@@ -7,6 +7,7 @@ import { reportFailure } from '@/lib/action-feedback';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
+import { Sparkline } from '@/components/shared/Sparkline';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccountSheet } from './AccountSheet';
 import { useAccounts, useDeleteAccount, useUpdateAccount } from './queries';
@@ -104,13 +105,30 @@ export function AccountsPage() {
                 </span>
               </div>
 
-              <div className="mt-3">
-                <Money value={account.balance} currency={account.currency} size="lg" tone="plain" />
-                {account.currency !== 'EGP' && (
-                  <p className="mt-0.5 font-numeric text-xs tabular-nums text-muted-foreground">
-                    {formatAmount(account.balanceEgp)} EGP
-                  </p>
-                )}
+              <div className="mt-3 flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <Money
+                    value={account.balance}
+                    currency={account.currency}
+                    size="lg"
+                    tone="plain"
+                  />
+                  {account.currency !== 'EGP' && (
+                    <p className="mt-0.5 font-numeric text-xs tabular-nums text-muted-foreground">
+                      {formatAmount(account.balanceEgp)} EGP
+                    </p>
+                  )}
+                </div>
+
+                {/*
+                  The last 30 days (SPEC §9). Decoration, and hidden from assistive tech:
+                  the balance beside it is the fact, and the shape only says which way it
+                  has been going. Below two days the sparkline draws nothing of its own.
+                */}
+                <Sparkline
+                  points={account.balanceHistory.map(Number)}
+                  className="shrink-0 text-muted-foreground"
+                />
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-2">

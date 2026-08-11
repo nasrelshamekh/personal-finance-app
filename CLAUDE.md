@@ -243,6 +243,18 @@ stated twice.
 from the name alone, so `const { useValue } = useCalculator()` makes every call site an
 illegal hook call — even inside an `onClick`. The calculator's is `sendToTransaction`.
 
+**`MoneyInput`'s Enter resolves before it submits.** Enter already means "work that out"
+while `1200*3` is showing, so `onEnter` fires only once there is nothing left to resolve —
+first Enter resolves, second submits. A handler on the same keystroke would send an
+unresolved expression the first time and the figure the second, which is the same key doing
+two different things depending on what you happened to type. `QuickAddRow` is the only
+caller so far.
+
+**The quick-add row hides itself while a filter is on.** A row added under a filter it does
+not match vanishes the instant it saves, which reads as a failure rather than a success. It
+counts active filters by the same rule the filter badge does — `page` and `pageSize` are
+bookkeeping, not choices.
+
 The calculator (`features/calculator/`) has **no arithmetic of its own**: it calls
 `evaluateExpression` from `@ledger/shared`, the same parser behind `MoneyInput` and the
 server, so `10/3` cannot mean three different things in three places. Its keypad is
