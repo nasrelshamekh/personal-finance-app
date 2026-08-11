@@ -114,8 +114,18 @@ export function AccountsPage() {
                     tone="plain"
                   />
                   {account.currency !== 'EGP' && (
-                    <p className="mt-0.5 font-numeric text-xs tabular-nums text-muted-foreground">
-                      {formatAmount(account.balanceEgp)} EGP
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      <span className="font-numeric tabular-nums">
+                        {formatAmount(account.balanceEgp)} EGP
+                      </span>{' '}
+                      {/*
+                        Said out loud, because the figure is not what the balance is worth
+                        today. Every row was converted at the rate on its own date and the
+                        opening balance at its opening rate (D5), so this is a sum of
+                        historical conversions — at today's rate it would be a different
+                        number, and nothing on the card said which of the two you had.
+                      */}
+                      at the rates when recorded
                     </p>
                   )}
                 </div>

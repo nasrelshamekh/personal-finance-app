@@ -101,6 +101,28 @@ describe('the cards', () => {
     expect(screen.getByText('-1,949.84 EGP')).toBeInTheDocument();
   });
 
+  /**
+   * The pound figure is a sum of historical conversions, not what the balance is worth
+   * today: each row was converted at the rate on its own date and the opening balance at
+   * its opening rate (D5). At today's rate it would be a different number, and the card
+   * used to show one without saying which.
+   */
+  it('says the pound figure is at the rates when each row was recorded', async () => {
+    arrange([BANK]);
+    render(<Harness />);
+
+    await screen.findByText('Bank (USD)');
+    expect(screen.getByText(/at the rates when recorded/)).toBeInTheDocument();
+  });
+
+  it('says nothing about rates for an account already in pounds', async () => {
+    arrange([CASH]);
+    render(<Harness />);
+
+    await screen.findByText('Cash (EGP)');
+    expect(screen.queryByText(/at the rates when recorded/)).toBeNull();
+  });
+
   it('does not repeat the pound figure for an account already in pounds', async () => {
     arrange([CASH]);
     render(<Harness />);
