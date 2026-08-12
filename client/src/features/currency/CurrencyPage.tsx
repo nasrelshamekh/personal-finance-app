@@ -133,11 +133,26 @@ export function CurrencyPage() {
             <caption className="sr-only">Exchange rates against the Egyptian pound</caption>
             <thead>
               <tr className="border-b border-border bg-card/50">
-                {['Pair', 'Rate', 'Source', 'Age'].map((heading) => (
+                {/*
+                  The leading column is the row's label, so it is left-aligned and the eye
+                  gets a stable edge to scan down; the rest are centred in their quarter.
+                  Centring "USD → EGP" as well would let the arrow wander between rows.
+                */}
+                {(
+                  [
+                    ['Pair', 'text-left'],
+                    ['Rate', 'text-center'],
+                    ['Source', 'text-center'],
+                    ['Age', 'text-center'],
+                  ] as const
+                ).map(([heading, align]) => (
                   <th
                     key={heading}
                     scope="col"
-                    className="w-1/4 px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+                    className={cn(
+                      'w-1/4 px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground',
+                      align,
+                    )}
                   >
                     {heading}
                   </th>
@@ -161,21 +176,22 @@ export function CurrencyPage() {
                   key={`${rate.base}-${rate.quote}`}
                   className="border-b border-border last:border-0"
                 >
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-3 text-left">
                     <span className="font-numeric text-sm text-foreground">
                       {rate.base} <span className="text-muted-foreground">→</span> {rate.quote}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {/*
-                      The column reads centred; the digits inside it stay right-aligned, so
-                      8.5000 still lines up under 67.8272. Centring the text itself would
-                      undo what `tabular-nums` is here for.
+                      Genuinely centred, not a right-aligned block pretending to be. Every
+                      rate renders as `NN.NNNN`, so `tabular-nums` keeps the decimals under
+                      one another anyway; a rate that reached three integer digits would sit
+                      half a character off, which is a fair price for a column that reads
+                      straight. The transactions table is the other way round, because
+                      amounts there genuinely do vary in length.
                     */}
-                    <span className="inline-block min-w-20 text-right">
-                      <span className="font-numeric tabular-nums text-foreground">
-                        {formatAmount(rate.rate, { dp: 4 })}
-                      </span>
+                    <span className="font-numeric tabular-nums text-foreground">
+                      {formatAmount(rate.rate, { dp: 4 })}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">

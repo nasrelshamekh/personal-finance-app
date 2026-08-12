@@ -555,7 +555,7 @@ export function TransactionsPage() {
                   </th>
                   {(
                     [
-                      ['Date', 'w-28 text-center'],
+                      ['Date', 'w-28 text-left'],
                       ['Description', 'text-left'],
                       ['Account', 'w-40 text-center'],
                       ['Amount', 'w-44 text-center'],
@@ -597,7 +597,7 @@ export function TransactionsPage() {
                         aria-label={selectionLabel(row)}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-center font-numeric text-sm tabular-nums text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-left font-numeric text-sm tabular-nums text-muted-foreground">
                       {format(parseISO(row.date), 'd MMM')}
                     </td>
                     <td className="px-3 py-2.5">
