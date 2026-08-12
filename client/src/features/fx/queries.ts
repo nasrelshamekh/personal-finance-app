@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Currency, StoredRateDto } from '@ledger/shared';
 import { fxApi } from './api';
 
@@ -78,6 +78,16 @@ export function useConvert(amount: string, from: Currency, to: Currency) {
     // A conversion is a question about right now; don't serve a minute-old answer.
     staleTime: 0,
     retry: false,
+    /*
+     * The amount is part of the key, so every keystroke starts a new query — and without
+     * this `data` went undefined in between, unmounting the rate line under the converter
+     * and making the whole panel jump as you typed a second zero onto 100.
+     *
+     * The figure it holds on to is the *previous* amount's, so the caller is told
+     * (`isPlaceholderData`) and shows it as provisional rather than passing a stale
+     * conversion off as the answer to what is now in the box.
+     */
+    placeholderData: keepPreviousData,
   });
 }
 

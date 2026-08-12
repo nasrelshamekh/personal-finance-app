@@ -85,10 +85,29 @@ export function Converter() {
               className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3"
               aria-live="polite"
             >
-              {conversion.isPending && amount.trim() !== '' ? (
+              {/*
+                An empty box is checked before the data, because the held-over figure now
+                outlives the query that produced it: without this, clearing the amount left
+                the last conversion sitting there as though it were still the answer.
+              */}
+              {amount.trim() === '' ? (
+                <span className="text-sm text-muted-foreground">—</span>
+              ) : conversion.isPending ? (
                 <span className="text-sm text-muted-foreground">Converting…</span>
               ) : conversion.data !== undefined ? (
-                <span className="font-numeric text-sm tabular-nums text-foreground">
+                /*
+                 * While a new amount is in flight this is still the *previous* amount's
+                 * figure, held so the panel does not unmount and jump under your hands.
+                 * Dimmed and marked busy for the moment it is out of date, because a
+                 * conversion presented at full confidence should be the one you asked for.
+                 */
+                <span
+                  className={cn(
+                    'font-numeric text-sm tabular-nums text-foreground transition-opacity',
+                    conversion.isPlaceholderData && 'opacity-50',
+                  )}
+                  aria-busy={conversion.isPlaceholderData}
+                >
                   {formatAmount(conversion.data.result)}
                 </span>
               ) : conversion.isError ? (

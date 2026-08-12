@@ -189,7 +189,8 @@ export function CurrencyPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <RateAge rate={rate} />
+                    {/* Dot in the cell's own padding, so the age lines up with "Age". */}
+                    <RateAge rate={rate} dotInGutter />
                   </td>
                 </tr>
               ))}

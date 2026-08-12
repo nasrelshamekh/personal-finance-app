@@ -33,9 +33,18 @@ interface RateAgeProps {
   className?: string;
   /** Hides the text and keeps only the dot, for tight rows. */
   compact?: boolean;
+  /**
+   * Hangs the dot in the padding to the left instead of letting it take a slot in the row.
+   *
+   * The dot is always rendered — transparent when the rate is fresh — so that a stale row
+   * and a fresh one line up with each other. In a table that pushed the age text 16px
+   * right of its own "Age" column heading. In the gutter it keeps the rows agreeing with
+   * each other *and* the column agreeing with its header.
+   */
+  dotInGutter?: boolean;
 }
 
-export function RateAge({ rate, className, compact = false }: RateAgeProps) {
+export function RateAge({ rate, className, compact = false, dotInGutter = false }: RateAgeProps) {
   const label = rateAgeLabel(rate);
   const reason = rate.staleReason === null ? null : REASON_TEXT[rate.staleReason];
 
@@ -44,6 +53,7 @@ export function RateAge({ rate, className, compact = false }: RateAgeProps) {
       className={cn(
         'inline-block size-1.5 shrink-0 rounded-full',
         rate.stale ? 'bg-money-stale' : 'bg-transparent',
+        dotInGutter && 'absolute -left-3 top-1/2 -translate-y-1/2',
       )}
     />
   );
@@ -51,7 +61,9 @@ export function RateAge({ rate, className, compact = false }: RateAgeProps) {
   const content = (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 text-[11px] tabular-nums',
+        'inline-flex items-center text-[11px] tabular-nums',
+        // In the gutter the dot is out of flow, so there is nothing to space away from.
+        dotInGutter ? 'relative' : 'gap-1.5',
         rate.stale ? 'text-money-stale' : 'text-muted-foreground',
         className,
       )}

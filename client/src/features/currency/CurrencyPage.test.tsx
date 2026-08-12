@@ -145,6 +145,21 @@ describe('the converter', () => {
     expect(converted().length).toBe(before);
   });
 
+  /*
+   * Not tested here: that the previous figure is *held* while a new amount converts.
+   *
+   * The amount is part of the query key, so every keystroke used to blank `data` and
+   * unmount the rate line, which is what made the panel jump as you typed another zero
+   * onto 100. `keepPreviousData` fixes it, but the difference exists only for the moment
+   * the request is in flight — and the stub here resolves synchronously, so there is no
+   * such moment to catch. A test that waits for it would be timing against the harness
+   * rather than the behaviour. Verified in the browser instead: the rates table below held
+   * a single position across four amount changes.
+   *
+   * What *is* tested is the regression it introduced, immediately above: a held figure
+   * must not outlive the amount that produced it.
+   */
+
   it('swaps the two currencies round', async () => {
     const user = userEvent.setup();
     arrange();
