@@ -123,34 +123,25 @@ export function CurrencyPage() {
         <Converter />
 
         <section className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
+          {/*
+            Four equal columns, every heading and every value centred in its own.
+            `table-fixed` is what makes the quarters actual quarters — left to itself a
+            table sizes columns by content, so "Automatic" and "9 hours ago" were pulling
+            the grid out of shape.
+          */}
+          <table className="w-full table-fixed text-sm">
             <caption className="sr-only">Exchange rates against the Egyptian pound</caption>
             <thead>
-              <tr className="border-b border-border bg-card/50 text-left">
-                <th
-                  scope="col"
-                  className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  Pair
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-2.5 text-right text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  Rate
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  Source
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
-                >
-                  Age
-                </th>
+              <tr className="border-b border-border bg-card/50">
+                {['Pair', 'Rate', 'Source', 'Age'].map((heading) => (
+                  <th
+                    key={heading}
+                    scope="col"
+                    className="w-1/4 px-4 py-2.5 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+                  >
+                    {heading}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -159,7 +150,7 @@ export function CurrencyPage() {
                   <tr key={index} className="border-b border-border last:border-0">
                     {[0, 1, 2, 3].map((cell) => (
                       <td key={cell} className="px-4 py-3">
-                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="mx-auto h-4 w-20" />
                       </td>
                     ))}
                   </tr>
@@ -170,17 +161,24 @@ export function CurrencyPage() {
                   key={`${rate.base}-${rate.quote}`}
                   className="border-b border-border last:border-0"
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     <span className="font-numeric text-sm text-foreground">
                       {rate.base} <span className="text-muted-foreground">→</span> {rate.quote}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="font-numeric tabular-nums text-foreground">
-                      {formatAmount(rate.rate, { dp: 4 })}
+                  <td className="px-4 py-3 text-center">
+                    {/*
+                      The column reads centred; the digits inside it stay right-aligned, so
+                      8.5000 still lines up under 67.8272. Centring the text itself would
+                      undo what `tabular-nums` is here for.
+                    */}
+                    <span className="inline-block min-w-20 text-right">
+                      <span className="font-numeric tabular-nums text-foreground">
+                        {formatAmount(rate.rate, { dp: 4 })}
+                      </span>
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     <span className="text-xs text-muted-foreground">
                       {rate.source === 'MANUAL' ? 'Entered by hand' : 'Automatic'}
                       {rate.derivation !== 'DIRECT' && (
@@ -188,8 +186,7 @@ export function CurrencyPage() {
                       )}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    {/* Dot in the cell's own padding, so the age lines up with "Age". */}
+                  <td className="px-4 py-3 text-center">
                     <RateAge rate={rate} dotInGutter />
                   </td>
                 </tr>

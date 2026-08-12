@@ -175,8 +175,17 @@ function selectionLabel(transaction: TransactionDto): string {
 /** Original amount is the hero; the pound equivalent sits under it (SPEC §9). */
 function AmountCell({ transaction }: { transaction: TransactionDto }) {
   return (
-    <div className="flex items-center justify-end gap-2">
-      <ApproximateMark transaction={transaction} />
+    /*
+     * Centred under its heading like every other column — but as a *block of fixed width*,
+     * not centred text. Centring the figures themselves would undo what `tabular-nums` is
+     * here for: -8.50 and -1,674.00 would stop lining up at the decimal, which is the one
+     * thing a column of money has to do. The mark keeps a reserved slot for the same
+     * reason, so a row that has one does not shunt its figure sideways.
+     */
+    <div className="mx-auto flex w-40 items-center justify-end gap-2">
+      <span className="flex w-3 shrink-0 justify-center">
+        <ApproximateMark transaction={transaction} />
+      </span>
       <div className="text-right">
         <Money value={transaction.amount} currency={transaction.currency} size="sm" />
         {transaction.currency !== 'EGP' && (
@@ -526,10 +535,17 @@ export function TransactionsPage() {
         <>
           {/* Desktop: a dense table. */}
           <div className="hidden overflow-hidden rounded-lg border border-border md:block">
-            <table className="w-full">
+            {/*
+              Same rules as the rates table: fixed column widths so the grid does not
+              re-shape itself around the longest note, and every heading sitting over its
+              own values. Description stays left because it is prose of varying length —
+              centring a ragged column of notes is harder to scan, not tidier — so its
+              heading stays left with it rather than drifting off its content.
+            */}
+            <table className="w-full table-fixed">
               <caption className="sr-only">Transactions, newest first</caption>
               <thead>
-                <tr className="border-b border-border bg-card/50 text-left">
+                <tr className="border-b border-border bg-card/50">
                   <th scope="col" className="w-10 px-3 py-2.5">
                     <Checkbox
                       checked={allSelected}
@@ -537,21 +553,25 @@ export function TransactionsPage() {
                       aria-label="Select all rows on this page"
                     />
                   </th>
-                  {['Date', 'Description', 'Account'].map((heading) => (
+                  {(
+                    [
+                      ['Date', 'w-28 text-center'],
+                      ['Description', 'text-left'],
+                      ['Account', 'w-40 text-center'],
+                      ['Amount', 'w-44 text-center'],
+                    ] as const
+                  ).map(([heading, width]) => (
                     <th
                       key={heading}
                       scope="col"
-                      className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
+                      className={cn(
+                        'px-3 py-2.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground',
+                        width,
+                      )}
                     >
                       {heading}
                     </th>
                   ))}
-                  <th
-                    scope="col"
-                    className="px-3 py-2.5 text-right text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
-                  >
-                    Amount
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -577,19 +597,19 @@ export function TransactionsPage() {
                         aria-label={selectionLabel(row)}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 font-numeric text-sm tabular-nums text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-center font-numeric text-sm tabular-nums text-muted-foreground">
                       {format(parseISO(row.date), 'd MMM')}
                     </td>
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
                         onClick={() => setEditing(row)}
-                        className="block max-w-[28rem] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <Description transaction={row} />
                       </button>
                     </td>
-                    <td className="px-3 py-2.5 text-sm text-muted-foreground">
+                    <td className="truncate px-3 py-2.5 text-center text-sm text-muted-foreground">
                       {row.account.name}
                     </td>
                     <td className="px-3 py-2.5">
