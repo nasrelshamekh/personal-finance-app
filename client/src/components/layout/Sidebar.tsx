@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -9,11 +9,18 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
+/** The same rule `NavLink`'s own `end` prop applies: only `/` needs an exact match. */
+function isCurrent(pathname: string, to: string): boolean {
+  return to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
+}
+
 /**
  * Persistent left sidebar (SPEC §10), collapsible to icons. Desktop only — below `md`
  * the bottom bar takes over, so this is hidden rather than reflowed.
  */
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { pathname } = useLocation();
+
   return (
     <aside
       className={cn(
@@ -48,31 +55,37 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <nav className="flex flex-1 flex-col gap-1 p-2" aria-label="Main">
         {NAV_ITEMS.map((item) => {
+          /*
+           * `isActive` is worked out here rather than taken from `NavLink`'s render props,
+           * because when collapsed this link becomes a `TooltipTrigger asChild` — and
+           * Radix's `Slot` merges `className` by *joining strings*. Handed a function it
+           * stringified the source, so the class attribute became
+           * `({ isActive }) => cn(\n  "flex items-center …` and the browser kept whichever
+           * tokens inside it happened to be valid class names. `items-center` survived,
+           * `"flex` did not. Collapsing the sidebar silently threw the layout away, which
+           * is what made the icons look off-centre.
+           */
+          const active = isCurrent(pathname, item.to);
+
           const link = (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  collapsed && 'justify-center px-0',
-                  isActive
-                    ? 'bg-accent font-medium text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <item.icon className="size-4 shrink-0" aria-hidden />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                  {/* Screen readers get the label even when it is visually collapsed. */}
-                  {collapsed && <span className="sr-only">{item.label}</span>}
-                  {isActive && <span className="sr-only">(current page)</span>}
-                </>
+              className={cn(
+                'flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                collapsed && 'justify-center gap-0 px-0',
+                active
+                  ? 'bg-accent font-medium text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
               )}
+            >
+              <item.icon className="size-4 shrink-0" aria-hidden />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+              {/* Screen readers get the label even when it is visually collapsed. */}
+              {collapsed && <span className="sr-only">{item.label}</span>}
+              {active && <span className="sr-only">(current page)</span>}
             </NavLink>
           );
 

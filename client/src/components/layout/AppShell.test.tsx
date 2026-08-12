@@ -197,6 +197,32 @@ describe('the sidebar', () => {
 
     expect(goTo(/Dashboard.*current page/)).toBeInTheDocument();
   });
+
+  /**
+   * Collapsed, each link becomes a `TooltipTrigger asChild`, and Radix's `Slot` merges
+   * `className` by joining strings. Handed `NavLink`'s render-prop form it stringified the
+   * function, so the class attribute became `({ isActive }) => cn(\n  "flex items-center …`
+   * and the browser kept whichever tokens inside it happened to be valid class names —
+   * `items-center` survived, `"flex` did not. Collapsing quietly threw the layout away.
+   */
+  it('keeps a real class list on the links when collapsed', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole('button', { name: 'Collapse sidebar' }));
+
+    const link = goTo(/Dashboard/);
+    expect(link.className).not.toContain('=>');
+    expect(link.className).toContain('justify-center');
+  });
+
+  /** Still marked as current when collapsed — the render-prop `isActive` went with it. */
+  it('still marks the current page when collapsed', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(await screen.findByRole('button', { name: 'Collapse sidebar' }));
+
+    expect(goTo(/Dashboard.*current page/)).toBeInTheDocument();
+  });
 });
 
 describe('the mobile bar', () => {

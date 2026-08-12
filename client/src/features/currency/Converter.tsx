@@ -73,22 +73,37 @@ export function Converter() {
 
         <div className="space-y-1.5">
           <Label htmlFor="convert-result">Result</Label>
-          <div
-            id="convert-result"
-            className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3"
-            aria-live="polite"
-          >
-            {conversion.isPending && amount.trim() !== '' ? (
-              <span className="text-sm text-muted-foreground">Converting…</span>
-            ) : conversion.data !== undefined ? (
-              <span className="font-numeric text-sm tabular-nums text-foreground">
-                {formatAmount(conversion.data.result)}
-              </span>
-            ) : conversion.isError ? (
-              <span className="text-sm text-money-negative">Check the amount.</span>
-            ) : (
-              <span className="text-sm text-muted-foreground">—</span>
-            )}
+          {/*
+            Wrapped so this column has the same shape as the one opposite: a field with a
+            message row under it, spaced the same way `MoneyInput` spaces its own. Matching
+            only the heights left the pickers 2px apart, because the inner gap differs from
+            the column's.
+          */}
+          <div className="space-y-1">
+            <div
+              id="convert-result"
+              className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3"
+              aria-live="polite"
+            >
+              {conversion.isPending && amount.trim() !== '' ? (
+                <span className="text-sm text-muted-foreground">Converting…</span>
+              ) : conversion.data !== undefined ? (
+                <span className="font-numeric text-sm tabular-nums text-foreground">
+                  {formatAmount(conversion.data.result)}
+                </span>
+              ) : conversion.isError ? (
+                <span className="text-sm text-money-negative">Check the amount.</span>
+              ) : (
+                <span className="text-sm text-muted-foreground">—</span>
+              )}
+            </div>
+            {/*
+              Mirrors the message row `MoneyInput` reserves opposite. Without it the two
+              columns are different heights, so the pickers under them sat 20px apart — and
+              the left one moved as you typed, because that row fills with `= 300.00` the
+              moment the amount becomes an expression.
+            */}
+            <div className="min-h-4" aria-hidden />
           </div>
           <CurrencyPicker value={to} onChange={setTo} only={CURRENCIES} aria-label="Convert to" />
         </div>

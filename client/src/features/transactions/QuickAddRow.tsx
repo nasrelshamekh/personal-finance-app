@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { TX_SIGN, type TxType } from '@ledger/shared';
+import type { TxType } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { todayIso } from '@/lib/dates';
 import { reportFailure } from '@/lib/action-feedback';
@@ -131,8 +131,11 @@ export function QuickAddRow() {
               onChange={setAmount}
               currency={account?.currency ?? 'EGP'}
               aria-label="Amount for the new transaction"
-              placeholder={`Add ${TX_SIGN[type] < 0 ? 'an expense' : 'an income'}`}
+              // Short enough to survive a 128px field: "Add an expense" was clipped to
+              // "Add an expen", and the Out/In buttons already say which way this goes.
+              placeholder="Amount"
               onEnter={submit}
+              compact
             />
           </div>
           <button

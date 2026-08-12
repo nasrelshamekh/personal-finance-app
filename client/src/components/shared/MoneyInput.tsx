@@ -36,6 +36,12 @@ export interface MoneyInputProps {
    * you happened to type. First Enter resolves, second submits.
    */
   onEnter?: () => void;
+  /**
+   * Drops the reserved message row, so the control is exactly as tall as its input and
+   * lines up with anything beside it. For inline places — a table cell — where a 16px
+   * spacer under every field would misalign the row.
+   */
+  compact?: boolean;
 }
 
 export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyInput(
@@ -49,6 +55,7 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
     autoFocus,
     className,
     onEnter,
+    compact = false,
     ...rest
   },
   ref,
@@ -102,7 +109,7 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
   }
 
   return (
-    <div className={cn('space-y-1', className)}>
+    <div className={cn(compact ? 'relative' : 'space-y-1', className)}>
       <Input
         {...rest}
         ref={ref}
@@ -123,7 +130,22 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function
         className="font-numeric tabular-nums"
       />
 
-      <div id={messageId} className="min-h-4 text-xs" aria-live="polite">
+      {/*
+        The message reserves a 16px row so the field does not jump when `= 300.00` appears.
+        That makes the whole control taller than a bare input, which quietly knocked
+        anything laid out beside it out of line — the currency converter's two pickers sat
+        20px apart, and the quick-add row's button missed its input. `compact` floats the
+        message instead, so the control is exactly as tall as its input and the expression
+        feedback survives.
+      */}
+      <div
+        id={messageId}
+        className={cn(
+          'text-xs',
+          compact ? 'pointer-events-none absolute left-0 top-full z-10 pt-0.5' : 'min-h-4',
+        )}
+        aria-live="polite"
+      >
         {message !== undefined ? (
           <span className="text-money-negative">{message}</span>
         ) : showsArithmetic && parsed?.ok === true ? (
