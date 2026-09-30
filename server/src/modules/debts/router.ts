@@ -7,6 +7,7 @@ import { AppError } from '../../lib/errors';
 import {
   createDebtPaymentSchema,
   createDebtSchema,
+  idAndPaymentIdParamSchema,
   idParamSchema,
   listDebtsQuerySchema,
   updateDebtSchema,
@@ -66,7 +67,7 @@ debtsRouter.post(
 
 debtsRouter.delete(
   '/:id/payments/:paymentId',
-  validate({ params: idParamSchema }),
+  validate({ params: idAndPaymentIdParamSchema }),
   async (req, res) => {
     const paymentId = req.params['paymentId'];
     if (typeof paymentId !== 'string') {

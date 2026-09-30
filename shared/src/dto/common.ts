@@ -43,6 +43,22 @@ export const idParamSchema = z.object({
   id: z.string().uuid('That is not a valid id.'),
 });
 
+/**
+ * For a nested delete route (`/:id/payments/:paymentId`, `/:id/contributions/:contributionId`).
+ * `validate()` in `server/src/middleware/validate.ts` *replaces* `req.params` with the
+ * parsed result, so validating a two-segment route against `idParamSchema` silently
+ * dropped the child id — the route 400'd claiming it was missing one it had been given.
+ */
+export const idAndPaymentIdParamSchema = z.object({
+  id: z.string().uuid('That is not a valid id.'),
+  paymentId: z.string().uuid('That is not a valid id.'),
+});
+
+export const idAndContributionIdParamSchema = z.object({
+  id: z.string().uuid('That is not a valid id.'),
+  contributionId: z.string().uuid('That is not a valid id.'),
+});
+
 /** Hex colour, as stored on accounts, categories and goals. */
 export const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a hex colour, e.g. #2f8f5b');
 

@@ -10,6 +10,7 @@ import { AppError } from '../../lib/errors';
 import {
   createContributionSchema,
   createSavingsGoalSchema,
+  idAndContributionIdParamSchema,
   idParamSchema,
   listSavingsQuerySchema,
   updateSavingsGoalSchema,
@@ -63,7 +64,7 @@ savingsRouter.post(
 
 savingsRouter.delete(
   '/:id/contributions/:contributionId',
-  validate({ params: idParamSchema }),
+  validate({ params: idAndContributionIdParamSchema }),
   async (req, res) => {
     const contributionId = req.params['contributionId'];
     if (typeof contributionId !== 'string') {

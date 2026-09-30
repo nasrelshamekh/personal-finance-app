@@ -1,6 +1,7 @@
 import {
   createDebtPaymentSchema,
   createDebtSchema,
+  idAndPaymentIdParamSchema,
   idParamSchema,
   listDebtsQuerySchema,
   updateDebtSchema,
@@ -12,6 +13,7 @@ export {
   createDebtPaymentSchema,
   listDebtsQuerySchema,
   idParamSchema,
+  idAndPaymentIdParamSchema,
 };
 
 export type { CreateDebtInput, UpdateDebtInput, CreateDebtPaymentInput } from '@ledger/shared';

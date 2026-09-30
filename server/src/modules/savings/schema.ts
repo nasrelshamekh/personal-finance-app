@@ -1,6 +1,7 @@
 import {
   createContributionSchema,
   createSavingsGoalSchema,
+  idAndContributionIdParamSchema,
   idParamSchema,
   listSavingsQuerySchema,
   updateSavingsGoalSchema,
@@ -12,6 +13,7 @@ export {
   createContributionSchema,
   listSavingsQuerySchema,
   idParamSchema,
+  idAndContributionIdParamSchema,
 };
 
 export type {
