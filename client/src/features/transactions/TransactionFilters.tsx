@@ -99,7 +99,7 @@ export function TransactionFilters({
       </div>
 
       {expanded && (
-        <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="glass grid gap-3 rounded-lg p-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label htmlFor="filter-account">Account</Label>
             <Select

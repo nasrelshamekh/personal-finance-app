@@ -17,7 +17,7 @@ export function Topbar() {
     NAV_ITEMS.find((item) => item.to === '/');
 
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur-sm">
+    <header className="glass-chrome sticky top-0 z-20 border-b">
       <div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
         {/* The app name only appears here on mobile, where the sidebar is hidden. */}
         <span className="text-sm font-semibold tracking-tight text-foreground md:hidden">

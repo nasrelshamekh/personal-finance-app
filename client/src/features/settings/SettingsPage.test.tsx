@@ -133,8 +133,8 @@ describe('appearance', () => {
   it('marks the active preset for a screen reader, not only by looking different', async () => {
     render(<Harness />);
 
-    const graphite = await screen.findByRole('button', { name: /Graphite/ });
-    expect(graphite).toHaveAttribute('aria-pressed', 'true');
+    const aurora = await screen.findByRole('button', { name: /Aurora/ });
+    expect(aurora).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /Harbour/ })).toHaveAttribute(
       'aria-pressed',
       'false',

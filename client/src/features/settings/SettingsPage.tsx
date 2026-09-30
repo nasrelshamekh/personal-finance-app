@@ -196,7 +196,7 @@ export function SettingsPage() {
           >
             Accounts
           </h3>
-          <div className="mt-4 rounded-lg border border-border p-4">
+          <div className="mt-4 glass rounded-lg p-4">
             <p className="max-w-prose text-xs text-muted-foreground">
               Accounts are managed on their own screen, where their balances are visible — which is
               the context you need to decide anything about them.
@@ -232,7 +232,7 @@ export function SettingsPage() {
           </h3>
 
           <div className="mt-4 space-y-4">
-            <div className="rounded-lg border border-border p-4">
+            <div className="glass rounded-lg p-4">
               <Label htmlFor="base-currency">Base currency</Label>
               <input
                 id="base-currency"

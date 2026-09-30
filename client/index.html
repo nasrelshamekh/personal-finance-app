@@ -13,10 +13,12 @@
       // The preset list is duplicated here on purpose: this has to run before any module
       // loads, so it cannot import from shared/. ThemeProvider.tsx holds the real list.
       (function () {
-        var PRESETS = ['graphite', 'harbour', 'papyrus', 'meridian', 'cinnabar', 'basalt'];
+        // prettier-ignore — kept on one line: a guard test parses this array by splitting
+        // on commas, and a trailing comma would read as an eighth, empty preset.
+        var PRESETS = ['aurora', 'graphite', 'harbour', 'papyrus', 'meridian', 'cinnabar', 'basalt'];
         var root = document.documentElement;
         var mode = 'system';
-        var preset = 'graphite';
+        var preset = 'aurora';
 
         try {
           var storedMode = localStorage.getItem('ledger.theme.mode');

@@ -1,8 +1,17 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@import '@fontsource-variable/inter-tight';
-@import '@fontsource-variable/jetbrains-mono';
+/*
+  Aurora's two faces. Self-hosted, never a CDN link — the app has to work offline, and a
+  font that 404s on a plane is a layout that reflows on a plane.
+
+  Outfit is a geometric sans that stays legible at 200–300 weight, which is what lets the
+  headings and the hero figure run light at large sizes instead of shouting. DM Mono is
+  the figure face: it is not a variable font, so its weights are imported individually.
+*/
+@import '@fontsource-variable/outfit';
+@import '@fontsource/dm-mono/400.css';
+@import '@fontsource/dm-mono/500.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -12,33 +21,40 @@
   Money colours are deliberately NOT theme tokens — see below.
 */
 :root {
-  --radius: 0.625rem;
+  --radius: 1rem;
 
-  --background: oklch(0.995 0 0);
-  --foreground: oklch(0.17 0.005 285);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.17 0.005 285);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.005 285);
-  --primary: oklch(0.45 0.02 260);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.003 285);
-  --secondary-foreground: oklch(0.24 0.006 285);
-  --muted: oklch(0.96 0.003 285);
-  --muted-foreground: oklch(0.53 0.011 285);
-  --accent: oklch(0.96 0.003 285);
-  --accent-foreground: oklch(0.24 0.006 285);
+  /*
+    Neutrals carry a deliberate violet cast (hue 292) rather than being pure grey. Chroma
+    stays low in light mode — enough to read as cool and considered, not as "purple UI" —
+    and rises in dark mode, where the tint has room to become the app's identity without
+    fighting the figures on top of it.
+  */
+  --background: oklch(0.972 0.016 292);
+  --foreground: oklch(0.2 0.042 292);
+  --card: oklch(0.995 0.006 292);
+  --card-foreground: oklch(0.2 0.042 292);
+  --popover: oklch(0.995 0.006 292);
+  --popover-foreground: oklch(0.2 0.042 292);
+  --primary: oklch(0.48 0.2 288);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.944 0.024 292);
+  --secondary-foreground: oklch(0.28 0.05 292);
+  --muted: oklch(0.944 0.024 292);
+  --muted-foreground: oklch(0.52 0.042 292);
+  --accent: oklch(0.935 0.042 292);
+  --accent-foreground: oklch(0.3 0.11 288);
   --destructive: oklch(0.58 0.196 27.3);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.91 0.004 286);
-  --input: oklch(0.91 0.004 286);
-  --ring: oklch(0.6 0.015 286);
+  --border: oklch(0.888 0.03 292);
+  --input: oklch(0.888 0.03 292);
+  --ring: oklch(0.58 0.19 288);
 
-  --chart-1: oklch(0.61 0.13 245);
-  --chart-2: oklch(0.6 0.11 185);
-  --chart-3: oklch(0.66 0.13 145);
-  --chart-4: oklch(0.72 0.14 85);
-  --chart-5: oklch(0.63 0.16 25);
+  /* Indigo → magenta, the ramp the whole identity is built on. */
+  --chart-1: oklch(0.55 0.2 288);
+  --chart-2: oklch(0.58 0.18 265);
+  --chart-3: oklch(0.57 0.2 308);
+  --chart-4: oklch(0.6 0.2 330);
+  --chart-5: oklch(0.64 0.16 348);
 
   /*
     Money semantics live outside the theme accent on purpose (SPEC §10): a preset must
@@ -47,49 +63,83 @@
   */
   --money-positive: oklch(0.55 0.13 155);
   --money-negative: oklch(0.55 0.17 25);
-  --money-neutral: oklch(0.53 0.011 285);
+  --money-neutral: oklch(0.52 0.042 292);
   --money-stale: oklch(0.72 0.15 75);
+
+  /*
+    How strongly the drifting ambient blooms register (see `.aurora-field`). Light mode
+    keeps them fainter: the same colour over a near-white ground reads far louder than it
+    does over a dark one.
+  */
+  --aurora-field-opacity: 0.45;
+
+  /*
+    The glass card. Aurora's cards are not filled — they are a translucent pane over the
+    ambient wash, so what is behind them shows through and no two cards on a page sit at
+    quite the same shade. Tokens rather than literals, so the treatment can differ per
+    mode without every component having to know about it.
+  */
+  --glass-from: oklch(1 0 0 / 78%);
+  --glass-to: oklch(1 0 0 / 48%);
+  --glass-border: oklch(0.5 0.09 292 / 16%);
+  --glass-blur: 16px;
+  --glass-shadow: 0 18px 42px -26px oklch(0.35 0.14 292 / 42%);
 }
 
 .dark {
-  --background: oklch(0.16 0.004 285);
-  --foreground: oklch(0.96 0.002 286);
-  --card: oklch(0.2 0.005 285);
-  --card-foreground: oklch(0.96 0.002 286);
-  --popover: oklch(0.2 0.005 285);
-  --popover-foreground: oklch(0.96 0.002 286);
-  --primary: oklch(0.8 0.02 260);
-  --primary-foreground: oklch(0.2 0.006 285);
-  --secondary: oklch(0.26 0.006 286);
-  --secondary-foreground: oklch(0.96 0.002 286);
-  --muted: oklch(0.26 0.006 286);
-  --muted-foreground: oklch(0.7 0.011 286);
-  --accent: oklch(0.26 0.006 286);
-  --accent-foreground: oklch(0.96 0.002 286);
+  /*
+    Aurora's home. A deep indigo-violet night rather than a black one: the background sits
+    well off pure black so the ambient blooms have somewhere to glow and the glass panes
+    above them have something to be translucent *against*. Everything shares hue 292, so
+    nothing reads as a grey patch pasted onto a violet app.
+  */
+  --background: oklch(0.155 0.045 292);
+  --foreground: oklch(0.955 0.015 300);
+  --card: oklch(0.215 0.05 292);
+  --card-foreground: oklch(0.955 0.015 300);
+  --popover: oklch(0.215 0.05 292);
+  --popover-foreground: oklch(0.955 0.015 300);
+  --primary: oklch(0.7 0.17 288);
+  --primary-foreground: oklch(0.16 0.05 292);
+  --secondary: oklch(0.285 0.055 292);
+  --secondary-foreground: oklch(0.955 0.015 300);
+  --muted: oklch(0.285 0.055 292);
+  --muted-foreground: oklch(0.73 0.045 295);
+  --accent: oklch(0.32 0.07 292);
+  --accent-foreground: oklch(0.94 0.04 295);
   --destructive: oklch(0.68 0.18 25);
-  --destructive-foreground: oklch(0.16 0.004 285);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.55 0.014 286);
+  --destructive-foreground: oklch(0.155 0.045 292);
+  --border: oklch(0.8 0.08 292 / 15%);
+  --input: oklch(0.8 0.08 292 / 20%);
+  --ring: oklch(0.7 0.17 288);
 
-  --chart-1: oklch(0.68 0.14 245);
-  --chart-2: oklch(0.68 0.12 185);
-  --chart-3: oklch(0.72 0.13 145);
-  --chart-4: oklch(0.78 0.14 85);
-  --chart-5: oklch(0.7 0.16 25);
+  --chart-1: oklch(0.68 0.18 288);
+  --chart-2: oklch(0.7 0.15 265);
+  --chart-3: oklch(0.68 0.19 308);
+  --chart-4: oklch(0.71 0.19 330);
+  --chart-5: oklch(0.75 0.15 348);
 
-  --money-positive: oklch(0.72 0.15 155);
-  --money-negative: oklch(0.7 0.17 25);
-  --money-neutral: oklch(0.7 0.011 286);
+  --money-positive: oklch(0.75 0.16 155);
+  --money-negative: oklch(0.71 0.17 25);
+  --money-neutral: oklch(0.73 0.045 295);
   --money-stale: oklch(0.8 0.15 75);
+
+  --aurora-field-opacity: 0.6;
+
+  /* Panes of light over a dark ground, rather than a lightened fill. */
+  --glass-from: oklch(1 0 0 / 11%);
+  --glass-to: oklch(1 0 0 / 4%);
+  --glass-border: oklch(1 0 0 / 13%);
+  --glass-blur: 18px;
+  --glass-shadow: 0 22px 48px -28px oklch(0.05 0.05 292 / 85%);
 }
 
 /*
   ── Presets ──────────────────────────────────────────────────────────────────
-  Six of them, each with a distinct temperature rather than six hues of the same
-  blue. A preset overrides ONLY --primary, --primary-foreground, --accent, --ring
-  and --chart-1..5 (SPEC §11). Base neutrals stay shared, and money colours are
-  never touched — a theme must not be able to repaint income and expenses.
+  Seven of them, each with a distinct temperature rather than seven hues of the
+  same blue. A preset overrides ONLY --primary, --primary-foreground, --accent,
+  --ring and --chart-1..5 (SPEC §11). Base neutrals stay shared, and money colours
+  are never touched — a theme must not be able to repaint income and expenses.
 
   Scoped to `[data-theme=…]` rather than `:root[data-theme=…]` so the selector also
   matches a nested element. That is what lets the Settings swatches render each
@@ -106,7 +156,38 @@
   combinations by `npm run check:contrast`.
 */
 
-/* Graphite — high-contrast monochrome. The default: nothing competes with the numbers. */
+/*
+  Aurora — indigo into magenta. The default and the app's own identity, and the only
+  preset that spans a range of hues rather than shading one: --chart-1..5 walk 265° → 348°,
+  so a donut of categories reads as one deliberate ramp instead of five unrelated colours.
+  The same two ends drive the drifting blooms behind the page (see `.aurora-field`).
+*/
+[data-theme='aurora'] {
+  --primary: oklch(0.48 0.2 288);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.935 0.042 292);
+  --accent-foreground: oklch(0.3 0.11 288);
+  --ring: oklch(0.58 0.19 288);
+  --chart-1: oklch(0.55 0.2 288);
+  --chart-2: oklch(0.58 0.18 265);
+  --chart-3: oklch(0.57 0.2 308);
+  --chart-4: oklch(0.6 0.2 330);
+  --chart-5: oklch(0.64 0.16 348);
+}
+[data-theme='aurora'].dark {
+  --primary: oklch(0.7 0.17 288);
+  --primary-foreground: oklch(0.16 0.05 292);
+  --accent: oklch(0.32 0.07 292);
+  --accent-foreground: oklch(0.94 0.04 295);
+  --ring: oklch(0.7 0.17 288);
+  --chart-1: oklch(0.68 0.18 288);
+  --chart-2: oklch(0.7 0.15 265);
+  --chart-3: oklch(0.68 0.19 308);
+  --chart-4: oklch(0.71 0.19 330);
+  --chart-5: oklch(0.75 0.15 348);
+}
+
+/* Graphite — high-contrast monochrome. Nothing competes with the numbers. */
 [data-theme='graphite'] {
   --primary: oklch(0.24 0.006 285);
   --primary-foreground: oklch(0.99 0 0);
@@ -294,13 +375,18 @@
   --color-money-neutral: var(--money-neutral);
   --color-money-stale: var(--money-stale);
 
-  --font-sans: 'Inter Tight Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+  --font-sans: 'Outfit Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, monospace;
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /*
+    Aurora's corners are generous. --radius is the *card* radius; the smaller steps come
+    down from it so a chip inside a card still reads as belonging to the same family
+    rather than as a differently-shaped thing that happens to sit there.
+  */
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 5px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 6px);
 }
 
 @layer base {
@@ -328,18 +414,152 @@
     @apply border-border outline-ring/50;
   }
 
+  /*
+    Reserves the scrollbar's width permanently, whether or not a page is tall enough to
+    need it. Without this, the browser's default scrollbar only exists on pages taller
+    than the viewport — so navigating from a short page (Savings) to a tall one
+    (Currency) or back toggles it on and off, and because it eats into the viewport's
+    width, every card on screen shifts sideways by its width right as the page
+    transition plays. Reads exactly like the layout shaking, because it is one.
+  */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /*
+    Flat. The ambient colour comes entirely from `.aurora-field` — the drifting blooms in
+    AppShell — rather than from a second static gradient here. Running both stacked the
+    tint twice over and scorched the top of every page magenta.
+  */
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-feature-settings: 'cv11', 'ss01';
   }
 
   /*
     Every monetary figure is tabular so columns align and digits don't jitter on update
     (SPEC §10). Applied via .tabular-nums / the <Money> component, never ad hoc.
+
+    DM Mono has no `zero` feature (it draws a slashed zero by default), so that setting is
+    dropped here rather than left pointing at nothing.
   */
   .font-numeric {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-feature-settings: 'zero' 1;
+  }
+}
+
+@layer components {
+  /*
+    Aurora's card. A translucent pane rather than a fill: `backdrop-filter` samples the
+    ambient wash behind it, so a card on the left of the page carries a little more indigo
+    and one on the right a little more magenta, without either being told about it.
+
+    Deliberately a component class rather than a utility string repeated in twenty files —
+    the treatment is the identity, and it has to be changeable in one place.
+  */
+  .glass {
+    background-image: linear-gradient(150deg, var(--glass-from), var(--glass-to));
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+  }
+
+  /*
+    The hero's extra half-step: the same pane, plus a bloom of the preset behind it. Only
+    ever one of these on a screen — it is what makes the eye land on the figure that
+    matters before anything else.
+  */
+  /*
+    The chrome — sidebar and topbar. The same pane as `.glass` but without the all-round
+    border and shadow, since these are edges of the window rather than objects floating in
+    it. Each caller adds the one border side it actually wants.
+  */
+  .glass-chrome {
+    background-image: linear-gradient(150deg, var(--glass-from), var(--glass-to));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-color: var(--glass-border);
+  }
+
+  /*
+    The slow drift behind the whole app. Two counter-rotating blooms on a 34s loop, far
+    enough apart in period that they never visibly repeat together — ambient enough to
+    read as "alive" in peripheral vision without ever asking to be looked at.
+
+    Pinned behind everything and `pointer-events: none`, so it cannot intercept a click.
+    Reduced motion is handled globally: the duration collapses to ~0 and the blooms simply
+    sit still, which is exactly the right outcome here.
+  */
+  .aurora-field {
+    position: fixed;
+    inset: -30%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--aurora-field-opacity, 1);
+  }
+
+  .aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    will-change: transform;
+  }
+
+  .aurora-blob-a {
+    width: 44%;
+    height: 44%;
+    top: 12%;
+    left: 2%;
+    background: color-mix(in oklab, var(--primary) 42%, transparent);
+    animation: aurora-drift-a 34s ease-in-out infinite;
+  }
+
+  /*
+    Pushed well down the field and away from the corner. Sitting high and right, this one
+    bloomed straight through the topbar and turned the whole masthead pink.
+  */
+  .aurora-blob-b {
+    width: 38%;
+    height: 38%;
+    top: 34%;
+    right: 2%;
+    background: color-mix(in oklab, var(--chart-4) 38%, transparent);
+    animation: aurora-drift-b 43s ease-in-out infinite;
+  }
+
+  @keyframes aurora-drift-a {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(12%, 8%, 0) scale(1.15);
+    }
+  }
+
+  @keyframes aurora-drift-b {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1.1);
+    }
+    50% {
+      transform: translate3d(-10%, 12%, 0) scale(0.95);
+    }
+  }
+
+  .glass-hero {
+    background-image:
+      radial-gradient(
+        ellipse 90% 130% at 88% 8%,
+        color-mix(in oklab, var(--chart-4) 22%, transparent),
+        transparent 58%
+      ),
+      radial-gradient(
+        ellipse 80% 120% at 4% 92%,
+        color-mix(in oklab, var(--primary) 26%, transparent),
+        transparent 60%
+      ),
+      linear-gradient(150deg, var(--glass-from), var(--glass-to));
   }
 }

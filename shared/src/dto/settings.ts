@@ -19,8 +19,13 @@ export interface SettingsDto {
 export const THEME_MODES = ['light', 'dark', 'system'] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 
-/** The six presets ship in Phase 4; the names are fixed here so both sides agree. */
+/**
+ * The names are fixed here so both sides agree. `aurora` is the default and was added
+ * after the original six — appending rather than reordering, because the stored value is
+ * a plain string column and an existing row must keep meaning what it meant.
+ */
 export const THEME_PRESETS = [
+  'aurora',
   'graphite',
   'harbour',
   'papyrus',

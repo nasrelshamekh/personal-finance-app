@@ -3,6 +3,7 @@ import type { DebtDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
+import { notifySuccess } from '@/lib/toast';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
   Sheet,
@@ -86,6 +87,7 @@ export function PaymentSheet({ debt, open, onOpenChange }: PaymentSheetProps) {
           accountId: accountId === NO_ACCOUNT ? null : accountId,
         },
       });
+      notifySuccess(`Payment logged for ${debt.counterparty}.`);
       onOpenChange(false);
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -125,7 +127,7 @@ export function PaymentSheet({ debt, open, onOpenChange }: PaymentSheetProps) {
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-4">
-          <div className="rounded-lg border border-border bg-card/40 p-3">
+          <div className="glass rounded-lg p-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Still outstanding
             </p>

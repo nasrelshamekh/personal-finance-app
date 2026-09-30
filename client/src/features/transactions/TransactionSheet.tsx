@@ -4,6 +4,7 @@ import type { TransactionDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
+import { notifySuccess } from '@/lib/toast';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
   Sheet,
@@ -177,6 +178,7 @@ export function TransactionSheet({
                 note: note === '' ? null : note,
               },
         });
+        notifySuccess('Transaction updated.');
       } else if (mode === 'TRANSFER') {
         await create.mutateAsync({
           type: 'TRANSFER',
@@ -187,6 +189,7 @@ export function TransactionSheet({
           date,
           note: note === '' ? null : note,
         });
+        notifySuccess('Transfer recorded.');
       } else {
         await create.mutateAsync({
           type: mode,
@@ -196,6 +199,7 @@ export function TransactionSheet({
           date,
           note: note === '' ? null : note,
         });
+        notifySuccess(mode === 'INCOME' ? 'Income added.' : 'Expense added.');
       }
       onOpenChange(false);
     } catch (error) {

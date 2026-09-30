@@ -239,6 +239,20 @@ Components with a natural place for an error — the sheets, the category manage
 rate editor — keep their inline message and do **not** also report, or the same failure is
 stated twice.
 
+**Success gets a sonner toast; failure stays on `ActionFeedback`.** `lib/toast.ts`'s
+`notifySuccess` is the confirming half — "Cash (EGP) created", "Debt payment logged" — and
+it is deliberately the opposite of `ActionFeedback` in every way that matters: top-centre
+rather than bottom, auto-dismissing rather than sticky, and routed through `sonner`'s own
+`<Toaster>` in `AppShell` rather than the module-level store. A success is disposable in a
+way a failure is not — nothing is lost if you miss it — so fighting sonner's default
+auto-dismiss the way `ActionFeedback` deliberately fights a timer would be solving a
+problem this side doesn't have. `notifySuccess` still has to name its subject for the same
+reason `reportFailure` does. Screens that already say "saved" their own way — the manual
+rate editor's inline checkmark, the budgets page's button that reads "Saved", the backup
+card's "Restored, every screen is now reading the backup" — do not also get a toast, for
+the same duplicate-statement reason errors don't; a binary toggle whose own state visibly
+flips (theme mode, the rates-API switch) doesn't either.
+
 **Don't name a context member `useSomething`.** `rules-of-hooks` decides what a hook is
 from the name alone, so `const { useValue } = useCalculator()` makes every call site an
 illegal hook call — even inside an `onClick`. The calculator's is `sendToTransaction`.
@@ -267,6 +281,31 @@ Tailwind **v4, CSS-first**. There is no `tailwind.config.js` and there must neve
 All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
 `@custom-variant dark`, then the token blocks, then `@theme inline` to expose them.
 
+**The identity is Aurora** — indigo into magenta, on a violet-cast neutral (hue 292).
+Three things carry it, and they are the three to preserve if you touch the look:
+
+- **`.aurora-field`** in `AppShell` — two slowly drifting, heavily blurred blooms of
+  `--primary` and `--chart-4`, fixed behind everything at `z-0` (the app sits at `z-10`).
+  It is the *only* source of ambient colour. An earlier pass also put static radial
+  gradients on `body`, and the two stacked into a scorched-magenta band across every
+  masthead — if you want the wash stronger, change `--aurora-field-opacity`, don't add a
+  second layer.
+- **`.glass` / `.glass-hero` / `.glass-chrome`** — cards are a translucent pane with
+  `backdrop-filter`, not a fill, which is what lets the drifting colour behind them show
+  through. Because they sample the field, two identical cards at opposite ends of a row
+  genuinely differ slightly, and that is the point. `.glass-chrome` is the borderless
+  variant for the sidebar and topbar, which are window edges rather than floating objects.
+- **`--chart-1..5` walk 265° → 348°**, so a category donut reads as one deliberate ramp.
+  `SEED_CATEGORIES` in `server/src/lib/seed-data.ts` and the `SWATCHES` rows in the three
+  sheets draw from the same arc, so a hand-picked colour lands in the same world as a
+  default one. They spread across blue → teal → violet → magenta rather than shading a
+  single hue, because twelve tints of one violet is an unreadable chart.
+
+Type is **Outfit** (UI, and light weights at large sizes) over **DM Mono** (every figure).
+Both self-hosted via `@fontsource`. DM Mono is not variable, so its weights are imported
+one file at a time, and it has no `zero` feature — `.font-numeric` sets `tabular-nums`
+only, where the old JetBrains Mono setup also asked for a slashed zero.
+
 - Theme has two independent axes: **mode** (`.dark` class on `<html>`) and **preset**
   (`data-theme="…"`). Both are applied by the blocking inline script in `index.html`
   *before* React mounts — that script is the only thing preventing a flash of wrong theme,
@@ -292,6 +331,25 @@ All configuration lives in `client/src/index.css`: `@import "tailwindcss"`, then
 - **Reduced motion collapses durations to 0.01ms; it does not disable animations.** Radix
   keeps a closing dialog mounted until `animationend`, so `animation: none` would strand
   every sheet and dropdown on screen. Same trap if you ever suspend animations globally.
+  `AppShell` also wraps the tree in framer-motion's `<MotionConfig reducedMotion="user">`,
+  which is the equivalent switch for anything framer animates rather than CSS.
+- **All motion comes from `client/src/lib/motion.ts`.** `SPRING`, `SPRING_SNAPPY`,
+  `STAGGER`, `RISE`, `LIFT` — scattering springs across components is how an app ends up
+  with six subtly different ideas of "fast". Two rules in there were each paid for with a
+  bug:
+  - **Damping stays at or above critical** (`damping ≥ 2√stiffness`). Underdamped, a card
+    overshoots and settles back, which reads as vibrating in place rather than arriving.
+  - **Opacity never rides a spring.** A spring hits ~90% within a beat whatever its
+    stiffness, so a spring-driven fade snaps visible then crawls — it registers as a flash.
+    Opacity always gets its own tween, and it is always the slower half of the pair.
+  - `LIFT` is `scale`, deliberately **not** `y`. framer composes the transform from
+    independent motion values, so a hover writing `scale` never contends with an entrance
+    writing `y`. A `whileHover={{ y: -2 }}` did contend, and the dashboard cards shook
+    whenever the pointer happened to rest over the grid as the page mounted.
+- **`scrollbar-gutter: stable` on `html` is load-bearing.** Without it the scrollbar only
+  exists on pages taller than the viewport, so navigating between a short page and a tall
+  one toggles it and shifts every card sideways by its width mid-transition. It reads
+  exactly like the layout shaking, because it is.
 - `client/src/components/ui/` is shadcn-generated. Extend by wrapping, don't hand-edit. If
   you genuinely must, note it here.
   - `dropdown-menu.tsx`: the generated `checked={checked}` passes an explicit `undefined`,

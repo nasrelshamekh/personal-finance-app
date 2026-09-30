@@ -4,6 +4,7 @@ import type { TxType } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { todayIso } from '@/lib/dates';
 import { reportFailure } from '@/lib/action-feedback';
+import { notifySuccess } from '@/lib/toast';
 import { MoneyInput } from '@/components/shared/MoneyInput';
 import { useAccountList } from '@/features/accounts/queries';
 import { useCategories } from '@/features/categories/queries';
@@ -49,6 +50,7 @@ export function QuickAddRow() {
       },
       {
         onSuccess: () => {
+          notifySuccess(type === 'INCOME' ? 'Income added.' : 'Expense added.');
           setAmount('');
           setCategoryId('');
         },

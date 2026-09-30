@@ -4,6 +4,7 @@ import { CreditCard, Pencil, Plus, Trash2 } from 'lucide-react';
 import { formatAmount, type DebtDirection, type DebtDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { reportFailure } from '@/lib/action-feedback';
+import { notifySuccess } from '@/lib/toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -88,6 +89,7 @@ function DebtCard({
             onClick={() => {
               if (window.confirm(`Delete the debt with ${debt.counterparty} and its payments?`)) {
                 remove.mutate(debt.id, {
+                  onSuccess: () => notifySuccess(`Debt with ${debt.counterparty} deleted.`),
                   onError: reportFailure(
                     `The debt with ${debt.counterparty} could not be deleted.`,
                   ),
@@ -145,6 +147,12 @@ function DebtCard({
             update.mutate(
               { id: debt.id, body: { status: settled ? 'ACTIVE' : 'SETTLED' } },
               {
+                onSuccess: () =>
+                  notifySuccess(
+                    settled
+                      ? `Debt with ${debt.counterparty} reopened.`
+                      : `Debt with ${debt.counterparty} marked settled.`,
+                  ),
                 onError: reportFailure(
                   settled
                     ? `The debt with ${debt.counterparty} could not be reopened.`

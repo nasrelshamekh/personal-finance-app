@@ -76,7 +76,7 @@ describe('creating a goal', () => {
       targetAmount: '45000',
       currency: 'EGP',
       deadline: '2027-03-31',
-      color: '#2f8f5b',
+      color: '#4f8ff5',
       icon: 'piggy-bank',
     });
   });
@@ -122,11 +122,11 @@ describe('creating a goal', () => {
 
     await user.type(screen.getByLabelText('Name'), 'Trip');
     await user.type(screen.getByLabelText('Target'), '2000');
-    await user.click(screen.getByRole('button', { name: 'Use colour #9f5f8f' }));
+    await user.click(screen.getByRole('button', { name: 'Use colour #8a86a8' }));
     await user.click(screen.getByRole('button', { name: 'Create goal' }));
 
     await waitFor(() => expect(api.requestsFor('POST /savings-goals')).toHaveLength(1));
-    expect(created()['color']).toBe('#9f5f8f');
+    expect(created()['color']).toBe('#8a86a8');
   });
 
   /** A goal with no target is not a goal — there is nothing to measure progress against. */

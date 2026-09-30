@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
+import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, CalendarOff, LayoutDashboard } from 'lucide-react';
 import { Decimal, formatAmount, type DashboardDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
+import { LIFT, RISE, SPRING_SNAPPY, STAGGER } from '@/lib/motion';
 import { currentMonth, monthDayRange, shiftMonth, useMonth } from '@/hooks/useMonth';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -51,13 +53,18 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <article className="rounded-lg border border-border bg-card/40 p-4">
+    <motion.article
+      variants={RISE}
+      whileHover={LIFT}
+      transition={SPRING_SNAPPY}
+      className="glass rounded-lg p-4"
+    >
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </p>
       <div className="mt-2">{children}</div>
       {hint !== undefined && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-    </article>
+    </motion.article>
   );
 }
 
@@ -70,7 +77,21 @@ function NetWorthCard({ data }: { data: DashboardDto }) {
   const hasDebts = owedByYou > 0 || owedToYou > 0;
 
   return (
-    <article className="rounded-lg border border-border bg-card/40 p-5 sm:col-span-2">
+    <motion.article
+      variants={RISE}
+      whileHover={LIFT}
+      transition={SPRING_SNAPPY}
+      className="glass glass-hero relative overflow-hidden rounded-xl p-5 sm:col-span-2"
+    >
+      {/*
+        A hairline of the preset across the top edge. The hero is the one card that should
+        look addressed rather than generic, and a 1px gradient does that without putting
+        colour anywhere near the figure itself.
+      */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent"
+      />
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
         In your accounts
       </p>
@@ -130,7 +151,7 @@ function NetWorthCard({ data }: { data: DashboardDto }) {
           </p>
         </div>
       )}
-    </article>
+    </motion.article>
   );
 }
 
@@ -206,7 +227,12 @@ export function DashboardPage() {
 
       {data !== undefined && hasAnything && (
         <div className="space-y-6">
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <motion.section
+            variants={STAGGER}
+            initial="hidden"
+            animate="show"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
             <NetWorthCard data={data} />
 
             <StatCard label="Income">
@@ -246,10 +272,10 @@ export function DashboardPage() {
               */}
               <Money value={totalInAccounts} currency="EGP" size="lg" tone="plain" />
             </StatCard>
-          </section>
+          </motion.section>
 
           <section className="grid gap-4 lg:grid-cols-2">
-            <article className="rounded-lg border border-border p-4">
+            <article className="glass rounded-lg p-4">
               <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Where it went
               </h3>
@@ -263,7 +289,7 @@ export function DashboardPage() {
               )}
             </article>
 
-            <article className="rounded-lg border border-border p-4">
+            <article className="glass rounded-lg p-4">
               <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Daily spending
               </h3>
@@ -274,7 +300,7 @@ export function DashboardPage() {
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">
-            <article className="rounded-lg border border-border p-4">
+            <article className="glass rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   Recent
@@ -311,7 +337,7 @@ export function DashboardPage() {
               )}
             </article>
 
-            <article className="rounded-lg border border-border p-4">
+            <article className="glass rounded-lg p-4">
               <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Accounts
               </h3>
@@ -366,7 +392,7 @@ export function DashboardPage() {
           {(data.debtsDueSoon.length > 0 || data.savingsGoals.length > 0) && (
             <section className="grid gap-4 lg:grid-cols-2">
               {data.debtsDueSoon.length > 0 && (
-                <article className="rounded-lg border border-border p-4">
+                <article className="glass rounded-lg p-4">
                   <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     Due in the next 30 days
                   </h3>
@@ -394,7 +420,7 @@ export function DashboardPage() {
               )}
 
               {data.savingsGoals.length > 0 && (
-                <article className="rounded-lg border border-border p-4">
+                <article className="glass rounded-lg p-4">
                   <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     Savings
                   </h3>

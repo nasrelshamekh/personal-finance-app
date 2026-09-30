@@ -4,6 +4,7 @@ import { CURRENCIES } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { todayIso } from '@/lib/dates';
 import { ApiError } from '@/lib/api';
+import { notifySuccess } from '@/lib/toast';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
   Sheet,
@@ -89,8 +90,10 @@ export function DebtSheet({
     try {
       if (isEditing && editing) {
         await update.mutateAsync({ id: editing.id, body });
+        notifySuccess(`Debt with ${counterparty} updated.`);
       } else {
         await create.mutateAsync(body);
+        notifySuccess(`Debt with ${counterparty} recorded.`);
       }
       onOpenChange(false);
     } catch (caught) {

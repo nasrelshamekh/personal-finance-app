@@ -89,7 +89,7 @@ export function CurrencyPage() {
       />
 
       {refresh.data !== undefined && (
-        <div className="mb-4 rounded-lg border border-border bg-card/40 p-3" role="status">
+        <div className="mb-4 glass rounded-lg p-3" role="status">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             What changed
           </p>
@@ -122,7 +122,7 @@ export function CurrencyPage() {
       <div className="space-y-4">
         <Converter />
 
-        <section className="overflow-hidden rounded-lg border border-border">
+        <section className="glass overflow-hidden rounded-lg">
           {/*
             Four equal columns, every heading and every value centred in its own.
             `table-fixed` is what makes the quarters actual quarters — left to itself a

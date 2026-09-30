@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CURRENCIES, type Currency, type SavingsGoalDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { ApiError } from '@/lib/api';
+import { notifySuccess } from '@/lib/toast';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import {
   Sheet,
@@ -16,7 +17,7 @@ import { MoneyInput } from '@/components/shared/MoneyInput';
 import { CurrencyPicker } from '@/components/shared/CurrencyPicker';
 import { useCreateGoal, useUpdateGoal } from './queries';
 
-const SWATCHES = ['#2f8f5b', '#4a6f9f', '#b06a3f', '#7f5f8f', '#3f8f7a', '#9f5f8f'];
+const SWATCHES = ['#4f8ff5', '#3fb6c9', '#7c5cf0', '#a95ce8', '#e05c9e', '#8a86a8'];
 
 interface GoalSheetProps {
   open: boolean;
@@ -76,8 +77,10 @@ export function GoalSheet({ open, onOpenChange, editing }: GoalSheetProps) {
     try {
       if (isEditing && editing) {
         await update.mutateAsync({ id: editing.id, body });
+        notifySuccess(`${name} updated.`);
       } else {
         await create.mutateAsync(body);
+        notifySuccess(`${name} created.`);
       }
       onOpenChange(false);
     } catch (caught) {

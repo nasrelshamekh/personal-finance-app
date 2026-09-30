@@ -32,7 +32,7 @@ export function Converter() {
   }
 
   return (
-    <section className="rounded-lg border border-border p-4" aria-labelledby="converter-heading">
+    <section className="glass rounded-lg p-4" aria-labelledby="converter-heading">
       <h3
         id="converter-heading"
         className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"

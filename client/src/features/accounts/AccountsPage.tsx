@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, Pencil, Plus, Wallet } from 'lucide-react';
 import { formatAmount, type AccountDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { reportFailure } from '@/lib/action-feedback';
+import { notifySuccess } from '@/lib/toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -87,7 +88,7 @@ export function AccountsPage() {
             <article
               key={account.id}
               className={cn(
-                'rounded-lg border border-border bg-card/40 p-4',
+                'glass rounded-lg p-4',
                 account.isArchived && 'opacity-60',
               )}
             >
@@ -170,10 +171,19 @@ export function AccountsPage() {
                       if (account.isArchived) {
                         update.mutate(
                           { id: account.id, body: { isArchived: false } },
-                          { onError: reportFailure(`${account.name} could not be restored.`) },
+                          {
+                            onSuccess: () => notifySuccess(`${account.name} restored.`),
+                            onError: reportFailure(`${account.name} could not be restored.`),
+                          },
                         );
                       } else {
                         remove.mutate(account.id, {
+                          onSuccess: (response) =>
+                            notifySuccess(
+                              response.outcome === 'deleted'
+                                ? `${account.name} deleted.`
+                                : `${account.name} archived.`,
+                            ),
                           onError: reportFailure(`${account.name} could not be archived.`),
                         });
                       }

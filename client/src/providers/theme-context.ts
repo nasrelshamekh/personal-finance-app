@@ -13,7 +13,7 @@ export const THEME_STORAGE_KEYS = {
 } as const;
 
 export const DEFAULT_MODE: ThemeMode = 'system';
-export const DEFAULT_PRESET: ThemePreset = 'graphite';
+export const DEFAULT_PRESET: ThemePreset = 'aurora';
 
 export interface PresetMeta {
   id: ThemePreset;
@@ -22,8 +22,9 @@ export interface PresetMeta {
   description: string;
 }
 
-/** Six presets, each a distinct temperature rather than six hues of the same blue. */
+/** Seven presets, each a distinct temperature rather than seven hues of the same blue. */
 export const PRESETS: readonly PresetMeta[] = [
+  { id: 'aurora', name: 'Aurora', description: 'Indigo into magenta' },
   { id: 'graphite', name: 'Graphite', description: 'High-contrast monochrome' },
   { id: 'harbour', name: 'Harbour', description: 'Cool and technical' },
   { id: 'papyrus', name: 'Papyrus', description: 'Warm earth and sand' },

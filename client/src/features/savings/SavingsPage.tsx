@@ -4,6 +4,7 @@ import { Check, Pencil, PiggyBank, Plus, Trash2 } from 'lucide-react';
 import { formatAmount, type SavingsGoalDto } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { reportFailure } from '@/lib/action-feedback';
+import { notifySuccess } from '@/lib/toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -65,7 +66,7 @@ function GoalCard({
   const remove = useDeleteGoal();
 
   return (
-    <article className="rounded-lg border border-border bg-card/40 p-4">
+    <article className="glass rounded-lg p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -89,6 +90,7 @@ function GoalCard({
             onClick={() => {
               if (window.confirm(`Delete ${goal.name} and its contributions?`)) {
                 remove.mutate(goal.id, {
+                  onSuccess: () => notifySuccess(`${goal.name} deleted.`),
                   onError: reportFailure(`${goal.name} could not be deleted.`),
                 });
               }

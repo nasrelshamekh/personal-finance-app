@@ -78,7 +78,15 @@ function readPair(selector, fallbackSelector) {
   return { primary: pick('primary'), foreground: pick('primary-foreground') };
 }
 
-const PRESETS = ['graphite', 'harbour', 'papyrus', 'meridian', 'cinnabar', 'basalt'];
+const PRESETS = [
+  'aurora',
+  'graphite',
+  'harbour',
+  'papyrus',
+  'meridian',
+  'cinnabar',
+  'basalt',
+];
 
 const rows = [];
 for (const preset of PRESETS) {

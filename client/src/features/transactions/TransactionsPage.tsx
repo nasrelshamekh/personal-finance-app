@@ -6,6 +6,7 @@ import { formatAmount, type CategoryKind, type TransactionDto } from '@ledger/sh
 import { cn } from '@/lib/cn';
 import { ApiError } from '@/lib/api';
 import { reportFailureNow } from '@/lib/action-feedback';
+import { notifySuccess } from '@/lib/toast';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Money } from '@/components/shared/Money';
@@ -387,6 +388,7 @@ export function TransactionsPage() {
   async function bulkDelete() {
     // Sequential rather than parallel: deleting one side of a transfer removes both, so
     // firing them together would produce avoidable 404s on the partner row.
+    const attempted = selected.size;
     let failed = 0;
     let lastError: unknown = null;
 
@@ -411,12 +413,15 @@ export function TransactionsPage() {
           : `${failed} transactions could not be deleted.`,
         lastError,
       );
+    } else {
+      notifySuccess(attempted === 1 ? 'Transaction deleted.' : `${attempted} transactions deleted.`);
     }
   }
 
   async function bulkRecategorise(categoryId: string) {
     // A partial result is the normal outcome here — an expense cannot take an income
     // category — so the count is the message rather than an error on each row.
+    let succeeded = 0;
     let failed = 0;
     let lastError: unknown = null;
 
@@ -425,6 +430,7 @@ export function TransactionsPage() {
       if (row === undefined || row.type === 'TRANSFER') continue;
       try {
         await update.mutateAsync({ id, body: { categoryId } });
+        succeeded += 1;
       } catch (caught) {
         failed += 1;
         lastError = caught;
@@ -440,6 +446,9 @@ export function TransactionsPage() {
           : `${failed} transactions kept their categories.`,
         lastError,
       );
+    }
+    if (succeeded > 0) {
+      notifySuccess(succeeded === 1 ? 'Transaction recategorised.' : `${succeeded} transactions recategorised.`);
     }
   }
 
@@ -534,7 +543,7 @@ export function TransactionsPage() {
       {!isPending && rows.length > 0 && (
         <>
           {/* Desktop: a dense table. */}
-          <div className="hidden overflow-hidden rounded-lg border border-border md:block">
+          <div className="hidden glass overflow-hidden rounded-lg md:block">
             {/*
               Same rules as the rates table: fixed column widths so the grid does not
               re-shape itself around the longest note, and every heading sitting over its
@@ -628,7 +637,7 @@ export function TransactionsPage() {
                 <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   {dayLabel(day)}
                 </h3>
-                <div className="overflow-hidden rounded-lg border border-border">
+                <div className="glass overflow-hidden rounded-lg">
                   {dayRows.map((row) => (
                     <button
                       key={row.id}

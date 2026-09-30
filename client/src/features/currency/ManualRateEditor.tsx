@@ -39,7 +39,7 @@ export function ManualRateEditor() {
   }
 
   return (
-    <section className="rounded-lg border border-border p-4" aria-labelledby="manual-rate-heading">
+    <section className="glass rounded-lg p-4" aria-labelledby="manual-rate-heading">
       <h3
         id="manual-rate-heading"
         className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
@@ -78,7 +78,7 @@ export function ManualRateEditor() {
                     current === undefined ? '0.0000' : formatAmount(current.rate, { dp: 4 })
                   }
                   inputMode="decimal"
-                  className="h-9 text-right font-numeric tabular-nums"
+                  className="h-9 text-left font-numeric tabular-nums"
                 />
               </div>
 

@@ -171,7 +171,7 @@ export function BudgetsPage() {
       {data !== undefined && data.rows.length > 0 && (
         <>
           <div className="mb-4 grid gap-4 sm:grid-cols-3">
-            <article className="rounded-lg border border-border bg-card/40 p-4">
+            <article className="glass rounded-lg p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Budgeted
               </p>
@@ -179,7 +179,7 @@ export function BudgetsPage() {
                 <Money value={data.totalLimitEgp} currency="EGP" size="lg" tone="plain" />
               </div>
             </article>
-            <article className="rounded-lg border border-border bg-card/40 p-4">
+            <article className="glass rounded-lg p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Spent
               </p>
@@ -187,7 +187,7 @@ export function BudgetsPage() {
                 <Money value={data.totalSpentEgp} currency="EGP" size="lg" tone="plain" />
               </div>
             </article>
-            <article className="rounded-lg border border-border bg-card/40 p-4">
+            <article className="glass rounded-lg p-4">
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Left
               </p>
@@ -273,7 +273,7 @@ export function BudgetsPage() {
             </p>
           )}
 
-          <div className="overflow-hidden rounded-lg border border-border">
+          <div className="glass overflow-hidden rounded-lg">
             {data.rows.map((row) => (
               <BudgetRow
                 key={row.categoryId}

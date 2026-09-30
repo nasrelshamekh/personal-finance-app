@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { PanelLeftClose, PanelLeftOpen, Wallet } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NAV_ITEMS } from './navigation';
@@ -22,12 +23,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { pathname } = useLocation();
 
   return (
-    <aside
-      className={cn(
-        'hidden shrink-0 flex-col border-r border-border bg-card/30 md:flex',
-        'transition-[width] duration-200 ease-out motion-reduce:transition-none',
-        collapsed ? 'w-[68px]' : 'w-56',
-      )}
+    <motion.aside
+      animate={{ width: collapsed ? 68 : 224 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 40 }}
+      className="glass-chrome relative z-10 hidden shrink-0 flex-col overflow-hidden border-r md:flex"
     >
       <div
         className={cn(
@@ -36,7 +35,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       >
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-foreground">Ledger EG</span>
+          <span className="flex items-center gap-2.5 text-sm font-semibold tracking-tight text-foreground">
+            {/*
+              The one place the preset's two chart ends meet as a gradient. --chart-3 is
+              the far end of Aurora's 265°→348° ramp, so the mark spans the same range the
+              category donut does rather than inventing a third palette.
+            */}
+            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-chart-3 text-primary-foreground shadow-sm">
+              <Wallet className="size-4" aria-hidden />
+            </span>
+            Ledger EG
+          </span>
         )}
         <button
           type="button"
@@ -73,16 +82,35 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               to={item.to}
               end={item.to === '/'}
               className={cn(
-                'flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors',
+                'relative flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 collapsed && 'justify-center gap-0 px-0',
                 active
-                  ? 'bg-accent font-medium text-accent-foreground'
+                  ? 'font-medium text-accent-foreground'
                   : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
               )}
             >
-              <item.icon className="size-4 shrink-0" aria-hidden />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {/*
+                A single pill that slides between rows via `layoutId`, rather than each row
+                painting its own background — framer-motion tweens the shared element's
+                position instead of one fading out while another fades in.
+              */}
+              {active && (
+                <motion.span
+                  layoutId="sidebar-active-pill"
+                  // Keeps `bg-accent` as the ground rather than a primary tint, because
+                  // the label on top is `text-accent-foreground` and that pairing is the
+                  // one the contrast gate checks. The ring adds the preset's colour
+                  // without touching what the text sits on.
+                  className="absolute inset-0 rounded-lg bg-accent ring-1 ring-inset ring-primary/20"
+                  // Critically damped (damping ≥ 2√stiffness ≈ 45 here) — the pill was
+                  // slightly underdamped before, so it overshot the new link and settled
+                  // back with a visible wobble on every page switch.
+                  transition={{ type: 'spring', stiffness: 500, damping: 46 }}
+                />
+              )}
+              <item.icon className="relative size-4 shrink-0" aria-hidden />
+              {!collapsed && <span className="relative truncate">{item.label}</span>}
               {/* Screen readers get the label even when it is visually collapsed. */}
               {collapsed && <span className="sr-only">{item.label}</span>}
               {active && <span className="sr-only">(current page)</span>}
@@ -99,6 +127,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </nav>
-    </aside>
+    </motion.aside>
   );
 }

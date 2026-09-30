@@ -23,7 +23,7 @@ export function RatesSection() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border p-4">
+      <div className="glass rounded-lg p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-prose">
             <p className="text-sm font-medium text-foreground">Fetch rates automatically</p>

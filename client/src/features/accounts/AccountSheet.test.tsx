@@ -125,20 +125,20 @@ describe('creating an account', () => {
     render(<Harness />);
 
     await user.type(screen.getByLabelText('Name'), 'Cash');
-    await user.click(screen.getByRole('button', { name: 'Use colour #7f5f8f' }));
+    await user.click(screen.getByRole('button', { name: 'Use colour #a95ce8' }));
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     await waitFor(() => expect(api.requestsFor('POST /accounts')).toHaveLength(1));
-    expect(created()['color']).toBe('#7f5f8f');
+    expect(created()['color']).toBe('#a95ce8');
   });
 
   it('marks the chosen swatch as pressed rather than relying on the ring', async () => {
     const user = userEvent.setup();
     render(<Harness />);
 
-    await user.click(screen.getByRole('button', { name: 'Use colour #b06a3f' }));
+    await user.click(screen.getByRole('button', { name: 'Use colour #7c5cf0' }));
 
-    expect(screen.getByRole('button', { name: 'Use colour #b06a3f' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Use colour #7c5cf0' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );

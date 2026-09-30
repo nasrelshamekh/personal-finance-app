@@ -29,7 +29,7 @@ function ExportCard() {
   const exportBackup = useExportBackup();
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="glass rounded-lg p-4">
       <p className="text-sm font-medium text-foreground">Export everything</p>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         One JSON file holding every account, transaction, debt, goal, budget and rate — with each
@@ -203,7 +203,7 @@ function ImportCard() {
   const canApply = backup !== null && report !== null && report.problems.length === 0;
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="glass rounded-lg p-4">
       <p className="text-sm font-medium text-foreground">Restore from a backup</p>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Pick a file and you get a summary of what would change. Nothing is written until you

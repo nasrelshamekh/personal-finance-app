@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, Check, Pencil, Plus, X } from 'lucide-react';
 import type { CategoryDto, CategoryKind } from '@ledger/shared';
 import { cn } from '@/lib/cn';
 import { ApiError } from '@/lib/api';
+import { notifySuccess } from '@/lib/toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,7 +14,7 @@ import {
   useUpdateCategory,
 } from './queries';
 
-const SWATCHES = ['#2f8f5b', '#b4553f', '#4a6f9f', '#8f7a3f', '#7f5f8f', '#6f6f6f'];
+const SWATCHES = ['#4f8ff5', '#3fb6c9', '#7c5cf0', '#a95ce8', '#e05c9e', '#8a86a8'];
 
 /**
  * Category management (SPEC §9).
@@ -50,9 +51,10 @@ export function CategoryManager() {
 
     const parent = roots.find((node) => node.id === newParentId);
 
+    const name = newName.trim();
     try {
       await create.mutateAsync({
-        name: newName.trim(),
+        name,
         /*
          * A child must share its parent's kind. `parentOptions` already filters to the
          * selected kind, so these two are always equal in practice — reading the parent's
@@ -64,6 +66,7 @@ export function CategoryManager() {
         icon: 'tag',
         parentId: newParentId === '' ? null : newParentId,
       });
+      notifySuccess(`${name} added.`);
       setNewName('');
       setNewParentId('');
     } catch (caught) {
@@ -78,6 +81,7 @@ export function CategoryManager() {
     setError(null);
     try {
       await update.mutateAsync({ id, body: { name } });
+      notifySuccess(`Renamed to ${name}.`);
       setEditingId(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'That could not be renamed.');
@@ -89,9 +93,11 @@ export function CategoryManager() {
     try {
       if (category.isArchived) {
         await update.mutateAsync({ id: category.id, body: { isArchived: false } });
+        notifySuccess(`${category.name} restored.`);
       } else {
         // Removes it outright when nothing references it, archives it when something does.
-        await remove.mutateAsync(category.id);
+        const { outcome } = await remove.mutateAsync(category.id);
+        notifySuccess(`${category.name} ${outcome === 'deleted' ? 'deleted' : 'archived'}.`);
       }
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'That could not be changed.');
@@ -202,7 +208,7 @@ export function CategoryManager() {
   const expense = roots.filter((node) => node.kind === 'EXPENSE');
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="glass rounded-lg p-4">
       <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1 space-y-1.5">
           <Label htmlFor="new-category">Add a category</Label>

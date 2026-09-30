@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe('what it starts from', () => {
-  it('defaults to following the OS, on the monochrome preset', () => {
+  it('defaults to following the OS, on the signature preset', () => {
     render(
       <ThemeProvider>
         <Probe />
@@ -88,7 +88,7 @@ describe('what it starts from', () => {
     );
 
     expect(readout('mode')).toBe('system');
-    expect(readout('preset')).toBe('graphite');
+    expect(readout('preset')).toBe('aurora');
   });
 
   it('adopts a stored choice', () => {
@@ -116,7 +116,7 @@ describe('what it starts from', () => {
     );
 
     expect(readout('mode')).toBe('system');
-    expect(readout('preset')).toBe('graphite');
+    expect(readout('preset')).toBe('aurora');
   });
 
   /** localStorage throws outright in some private-browsing modes. A default beats a blank page. */
