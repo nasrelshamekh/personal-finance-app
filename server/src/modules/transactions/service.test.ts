@@ -575,7 +575,7 @@ describe('listing', () => {
       const from = await makeAccount(tx, { currency: 'EGP', name: 'Cash' });
       const to = await makeAccount(tx, { currency: 'EGP', name: 'Bank' });
 
-      await createTransaction(tx, {
+      const created = await createTransaction(tx, {
         type: 'TRANSFER',
         fromAccountId: from.id,
         toAccountId: to.id,
@@ -586,8 +586,13 @@ describe('listing', () => {
 
       const listed = await listTransactions(tx, { ...listDefaults, type: 'TRANSFER' });
 
-      expect(listed.data).toHaveLength(2);
-      for (const row of listed.data) {
+      // Scoped to this test's own transfer: the dev database this suite runs against can
+      // hold real transfers of its own (CLAUDE.md — never assume an empty table), and an
+      // unscoped length assertion here would count theirs too.
+      const rows = listed.data.filter((row) => row.transferGroupId === created.transferGroupId);
+
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
         expect(row.transferCounterpart).not.toBeNull();
         expect(row.transferCounterpart?.accountName).toBe(
           row.accountId === from.id ? 'Bank' : 'Cash',
